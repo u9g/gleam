@@ -70,6 +70,12 @@ where
         let reporter = ConnectionProgressReporter::new(connection, &initialise_params);
         let io = FileSystemProxy::new(io);
         let config = SharedConfig::default();
+        {
+            let mut cc = config.write().unwrap();
+            cc.inlay_hints.function_definitions = true;
+            cc.inlay_hints.module_constants = true;
+            cc.inlay_hints.variable_assignments = true;
+        }
         let router = Router::new(reporter, io.clone(), config.clone());
         Ok(Self {
             connection: connection.into(),
@@ -560,19 +566,19 @@ where
 
     /// Response handler for the `workspace/configuration` request
     fn configuration_update_received(&mut self, result: Json) {
-        if result.is_array() && !result.get(0).is_some_and(|config| config.is_null()) {
-            let configs = match serde_json::from_value::<Vec<Configuration>>(result) {
-                Ok(result) => result,
-                Err(err) => {
-                    panic!("unable to parse configuration: {err}");
-                }
-            };
-            // We only requested one configuration item, so we only pick out one
-            if let Some(new_config) = configs.into_iter().next() {
-                let mut config = self.config.write().expect("lock is poisoned");
-                *config = new_config;
-            }
-        }
+        // if result.is_array() && !result.get(0).is_some_and(|config| config.is_null()) {
+        //     let configs = match serde_json::from_value::<Vec<Configuration>>(result) {
+        //         Ok(result) => result,
+        //         Err(err) => {
+        //             panic!("unable to parse configuration: {err}");
+        //         }
+        //     };
+        //     // We only requested one configuration item, so we only pick out one
+        //     if let Some(new_config) = configs.into_iter().next() {
+        //         let mut config = self.config.write().expect("lock is poisoned");
+        //         *config = new_config;
+        //     }
+        // }
     }
 }
 

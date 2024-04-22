@@ -18,6 +18,7 @@ use camino::Utf8PathBuf;
 use ecow::EcoString;
 use im::HashMap;
 use itertools::Itertools;
+use lsp::InlayHintKind;
 use lsp_types::{
     self as lsp, CodeAction, Hover, HoverContents, InlayHint, MarkedString, Position, Url,
 };
@@ -479,6 +480,347 @@ where
                 &module_qualifiers,
             );
 
+            let code = &module.code;
+
+            fn handle_statement(
+                stmt: &crate::ast::Statement<Arc<Type>, TypedExpr>,
+                code: &EcoString,
+                hints: &mut Vec<InlayHint>,
+                line_numbers: &LineNumbers,
+                type_parameters: &HashMap<u64, crate::ast::TypeAst>,
+                type_qualifiers: &HashMap<EcoString, EcoString>,
+                module_qualifiers: &HashMap<EcoString, EcoString>,
+            ) {
+                match stmt {
+                    crate::ast::Statement::Expression(expr) => handle_expression(
+                        &expr,
+                        code,
+                        hints,
+                        line_numbers,
+                        type_parameters,
+                        type_qualifiers,
+                        module_qualifiers,
+                    ),
+                    crate::ast::Statement::Assignment(asmt) => handle_expression(
+                        &asmt.value,
+                        code,
+                        hints,
+                        line_numbers,
+                        type_parameters,
+                        type_qualifiers,
+                        module_qualifiers,
+                    ),
+                    crate::ast::Statement::Use(use_) => {
+                        // todo!
+
+                        // handle_expression(use_.)
+                    }
+                }
+            }
+
+            fn handle_expression(
+                expr: &TypedExpr,
+                code: &EcoString,
+                hints: &mut Vec<InlayHint>,
+                line_numbers: &LineNumbers,
+                type_parameters: &HashMap<u64, crate::ast::TypeAst>,
+                type_qualifiers: &HashMap<EcoString, EcoString>,
+                module_qualifiers: &HashMap<EcoString, EcoString>,
+            ) {
+                match expr {
+                    TypedExpr::Block {
+                        location,
+                        statements,
+                    } => statements.iter().for_each(|stmt| {
+                        handle_statement(
+                            stmt,
+                            code,
+                            hints,
+                            line_numbers,
+                            type_parameters,
+                            type_qualifiers,
+                            module_qualifiers,
+                        )
+                    }),
+                    TypedExpr::Pipeline {
+                        location,
+                        assignments,
+                        finally,
+                    } => {
+                        tracing::info!("Pipeline Finder>> found pipeline!");
+                        if &(code[(finally.location().end as usize)
+                            ..(finally.location().end as usize) + 1])
+                            == "\n"
+                        {
+                            let linecol =
+                                line_numbers.line_and_column_number(finally.location().end);
+                            let position = Position::new(linecol.line - 1, linecol.column - 1);
+                            let type_text = TypeAnnotations::generate_type_text(
+                                &finally.type_(),
+                                type_qualifiers,
+                                module_qualifiers,
+                                type_parameters,
+                            );
+                            hints.push(InlayHint {
+                                position: position,
+                                label: lsp::InlayHintLabel::String(
+                                    type_text.trim_start().to_owned(),
+                                ),
+                                kind: Some(InlayHintKind::TYPE),
+                                text_edits: None,
+                                tooltip: None,
+                                padding_left: Some(true),
+                                padding_right: None,
+                                data: None,
+                            })
+                        }
+                        for asmt in assignments {
+                            // tracing::info!(count=%loaded.to_compile.len(), "analysing_modules");
+                            if &(code
+                                [(asmt.location.end as usize)..(asmt.location.end as usize) + 1])
+                                == "\n"
+                            {
+                                let linecol =
+                                    line_numbers.line_and_column_number(asmt.location.end);
+                                let position = Position::new(linecol.line - 1, linecol.column - 1);
+                                let type_text = TypeAnnotations::generate_type_text(
+                                    &asmt.type_(),
+                                    type_qualifiers,
+                                    module_qualifiers,
+                                    type_parameters,
+                                );
+                                hints.push(InlayHint {
+                                    position: position,
+                                    label: lsp::InlayHintLabel::String(
+                                        type_text.trim_start().to_owned(),
+                                    ),
+                                    kind: Some(InlayHintKind::TYPE),
+                                    text_edits: None,
+                                    tooltip: None,
+                                    padding_left: Some(true),
+                                    padding_right: None,
+                                    data: None,
+                                })
+                            }
+                        }
+                    }
+                    TypedExpr::Var {
+                        location,
+                        constructor,
+                        name,
+                    } => {
+                        // IdentifierReference
+                    }
+                    TypedExpr::Fn {
+                        location,
+                        typ,
+                        is_capture,
+                        args,
+                        body,
+                        return_annotation,
+                    } => body.iter().for_each(|stmt| {
+                        handle_statement(
+                            stmt,
+                            code,
+                            hints,
+                            line_numbers,
+                            type_parameters,
+                            type_qualifiers,
+                            module_qualifiers,
+                        )
+                    }),
+                    TypedExpr::List {
+                        location,
+                        typ,
+                        elements,
+                        tail,
+                    } => {
+                        elements.iter().for_each(|expr| {
+                            handle_expression(
+                                expr,
+                                code,
+                                hints,
+                                line_numbers,
+                                type_parameters,
+                                type_qualifiers,
+                                module_qualifiers,
+                            )
+                        });
+                        tail.iter().for_each(|expr| {
+                            handle_expression(
+                                expr,
+                                code,
+                                hints,
+                                line_numbers,
+                                type_parameters,
+                                type_qualifiers,
+                                module_qualifiers,
+                            )
+                        });
+                    }
+                    TypedExpr::Call {
+                        location,
+                        typ,
+                        fun,
+                        args,
+                    } => {
+                        handle_expression(
+                            &fun,
+                            code,
+                            hints,
+                            line_numbers,
+                            type_parameters,
+                            type_qualifiers,
+                            module_qualifiers,
+                        );
+                        args.iter().for_each(|x| {
+                            handle_expression(
+                                &x.value,
+                                code,
+                                hints,
+                                line_numbers,
+                                type_parameters,
+                                type_qualifiers,
+                                module_qualifiers,
+                            )
+                        });
+                    }
+                    TypedExpr::BinOp {
+                        location,
+                        typ,
+                        name,
+                        left,
+                        right,
+                    } => {}
+                    TypedExpr::Case {
+                        location,
+                        typ,
+                        subjects,
+                        clauses,
+                    } => {
+                        subjects.iter().for_each(|expr| {
+                            handle_expression(
+                                expr,
+                                code,
+                                hints,
+                                line_numbers,
+                                type_parameters,
+                                type_qualifiers,
+                                module_qualifiers,
+                            )
+                        });
+                        clauses.iter().for_each(|clause| {
+                            handle_expression(
+                                &clause.then,
+                                code,
+                                hints,
+                                line_numbers,
+                                type_parameters,
+                                type_qualifiers,
+                                module_qualifiers,
+                            )
+                        })
+                    }
+                    TypedExpr::RecordAccess {
+                        location,
+                        typ,
+                        label,
+                        index,
+                        record,
+                    } => {}
+                    TypedExpr::ModuleSelect {
+                        location,
+                        typ,
+                        label,
+                        module_name,
+                        module_alias,
+                        constructor,
+                    } => {}
+                    TypedExpr::Tuple {
+                        location,
+                        typ,
+                        elems,
+                    } => {}
+                    TypedExpr::TupleIndex {
+                        location,
+                        typ,
+                        index,
+                        tuple,
+                    } => {}
+                    TypedExpr::Todo {
+                        location,
+                        message,
+                        type_,
+                    }
+                    | TypedExpr::Panic {
+                        location,
+                        message,
+                        type_,
+                    } => {
+                        message.iter().for_each(|x| {
+                            handle_expression(
+                                &x,
+                                code,
+                                hints,
+                                line_numbers,
+                                type_parameters,
+                                type_qualifiers,
+                                module_qualifiers,
+                            )
+                        });
+                    }
+                    TypedExpr::BitArray {
+                        location,
+                        typ,
+                        segments,
+                    } => todo!(),
+                    TypedExpr::RecordUpdate {
+                        location,
+                        typ,
+                        spread,
+                        args,
+                    } => todo!(),
+                    TypedExpr::NegateBool { location, value }
+                    | TypedExpr::NegateInt { location, value } => handle_expression(
+                        &value,
+                        code,
+                        hints,
+                        line_numbers,
+                        type_parameters,
+                        type_qualifiers,
+                        module_qualifiers,
+                    ),
+                    _ => {}
+                }
+            }
+
+            module
+                .ast
+                .definitions
+                .iter()
+                .filter(|stmt| {
+                    // Only consider definitions in the requested range
+                    requested_range.overlaps(&stmt.location())
+                })
+                .for_each(|x| match x {
+                    Definition::Function(f) => {
+                        f.body.iter().for_each(|stmt| {
+                            let type_parameters =
+                                TypeAnnotations::extract_type_parameters_from_fn(f);
+                            handle_statement(
+                                stmt,
+                                code,
+                                &mut hints,
+                                &line_numbers,
+                                &type_parameters,
+                                &type_qualifiers,
+                                &module_qualifiers,
+                            )
+                        });
+                    }
+                    _ => {}
+                });
+
             Ok(hints)
         })
     }
@@ -801,7 +1143,7 @@ fn code_action_annotate_types(
                 &line_numbers,
                 type_qualifiers,
                 module_qualifiers,
-                &type_parameters
+                &type_parameters,
             )
             .into_code_action(uri)
             {
@@ -830,28 +1172,33 @@ fn add_hints_for_definitions<'a>(
 ) {
     for def in definitions {
         match def {
-            Definition::Function(function) =>  { 
+            Definition::Function(function) => {
                 let type_parameters = TypeAnnotations::extract_type_parameters_from_fn(function);
                 if config.function_definitions {
                     hints.extend(
-                    TypeAnnotations::from_function_definition(
-                        function,
-                        line_numbers,
-                        type_qualifiers,
-                        module_qualifiers,
-                        &type_parameters
-                    ).into_inlay_hints());
+                        TypeAnnotations::from_function_definition(
+                            function,
+                            line_numbers,
+                            type_qualifiers,
+                            module_qualifiers,
+                            &type_parameters,
+                        )
+                        .into_inlay_hints(),
+                    );
                 }
-                if config.variable_assignments{
+                if config.variable_assignments {
                     hints.extend(
                         TypeAnnotations::from_function_body(
                             function,
                             line_numbers,
                             type_qualifiers,
                             module_qualifiers,
-                            &type_parameters).into_inlay_hints());
+                            &type_parameters,
+                        )
+                        .into_inlay_hints(),
+                    );
                 }
-            },
+            }
             Definition::ModuleConstant(constant) if config.module_constants => hints.extend(
                 TypeAnnotations::from_module_constant(constant, line_numbers).into_inlay_hints(),
             ),

@@ -73,13 +73,12 @@ impl TypeAnnotations {
 
     // Generates the text for the annotation of a type taking into account qualifiers for modules and type
     // and any type parameters defined in the function.
-    fn generate_type_text(
+    pub fn generate_type_text(
         type_: &Type,
         type_qualifiers: &HashMap<EcoString, EcoString>,
         module_qualifiers: &HashMap<EcoString, EcoString>,
         type_parameters: &HashMap<u64, TypeAst>,
-    ) -> String 
-    {
+    ) -> String {
         if let crate::type_::Type::Var { type_ } = type_ {
             if let crate::type_::TypeVar::Generic { id } = *type_.borrow() {
                 if let Some(crate::ast::TypeAst::Var(type_var)) = type_parameters.get(&id) {
@@ -88,7 +87,8 @@ impl TypeAnnotations {
             }
         }
         let mut type_text = EcoString::from(
-            LspPrinter::new(type_qualifiers, module_qualifiers, type_parameters).pretty_print(type_),
+            LspPrinter::new(type_qualifiers, module_qualifiers, type_parameters)
+                .pretty_print(type_),
         );
         type_text = type_qualifiers
             .get(&type_text)
@@ -98,13 +98,12 @@ impl TypeAnnotations {
         type_text.to_string()
     }
 
-
     pub fn from_function_body(
         function: &TypedFunction,
         line_numbers: &LineNumbers,
         type_qualifiers: &HashMap<EcoString, EcoString>,
         module_qualifiers: &HashMap<EcoString, EcoString>,
-        type_parameters: &HashMap<u64, TypeAst>
+        type_parameters: &HashMap<u64, TypeAst>,
     ) -> Self {
         let mut annotations = vec![];
         for statement in &function.body {
@@ -130,7 +129,7 @@ impl TypeAnnotations {
         line_numbers: &LineNumbers,
         type_qualifiers: &HashMap<EcoString, EcoString>,
         module_qualifiers: &HashMap<EcoString, EcoString>,
-        type_parameters: &HashMap<u64, TypeAst>
+        type_parameters: &HashMap<u64, TypeAst>,
     ) -> Self {
         let mut annotations = vec![];
 
@@ -160,8 +159,6 @@ impl TypeAnnotations {
 
             annotations.push((position, format!(" -> {type_text}")));
         }
-
-        
 
         Self { annotations }
     }
