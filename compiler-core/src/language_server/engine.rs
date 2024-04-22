@@ -490,6 +490,7 @@ where
                 type_qualifiers: &HashMap<EcoString, EcoString>,
                 module_qualifiers: &HashMap<EcoString, EcoString>,
                 hints: &mut Vec<InlayHint>,
+                is_let_statement_annotation: bool,
             ) {
                 let linecol = line_numbers.line_and_column_number(span.end);
                 if hints.iter().any(|x| {
@@ -499,12 +500,15 @@ where
                     return;
                 }
                 let position = Position::new(linecol.line - 1, linecol.column - 1);
-                let type_text = TypeAnnotations::generate_type_text(
+                let mut type_text = TypeAnnotations::generate_type_text(
                     &type_,
                     type_qualifiers,
                     module_qualifiers,
                     type_parameters,
                 );
+                if is_let_statement_annotation {
+                    type_text = format!(": {}", type_text).to_owned()
+                }
                 hints.push(InlayHint {
                     position: position,
                     label: lsp::InlayHintLabel::String(type_text.trim_start().to_owned()),
@@ -555,6 +559,7 @@ where
                                     &type_qualifiers,
                                     &module_qualifiers,
                                     hints,
+                                    false,
                                 );
                             }
                         }
@@ -582,15 +587,42 @@ where
                         type_qualifiers,
                         module_qualifiers,
                     ),
-                    crate::ast::Statement::Assignment(asmt) => handle_expression(
-                        &asmt.value,
-                        code,
-                        hints,
-                        line_numbers,
-                        type_parameters,
-                        type_qualifiers,
-                        module_qualifiers,
-                    ),
+                    crate::ast::Statement::Assignment(asmt) => {
+                        // annotate let statement
+                        annotate_location_with_type(
+                            &asmt.type_(),
+                            match asmt.pattern {
+                                crate::ast::Pattern::Int { location, .. } => location,
+                                crate::ast::Pattern::Float { location, .. } => location,
+                                crate::ast::Pattern::String { location, .. } => location,
+                                crate::ast::Pattern::Variable { location, .. } => location,
+                                crate::ast::Pattern::VarUsage { location, .. } => location,
+                                crate::ast::Pattern::Assign { location, .. } => location,
+                                crate::ast::Pattern::Discard { location, .. } => location,
+                                crate::ast::Pattern::List { location, .. } => location,
+                                crate::ast::Pattern::Constructor { location, .. } => location,
+                                crate::ast::Pattern::Tuple { location, .. } => location,
+                                crate::ast::Pattern::BitArray { location, .. } => location,
+                                crate::ast::Pattern::StringPrefix { location, .. } => location,
+                            },
+                            &line_numbers,
+                            &type_parameters,
+                            &type_qualifiers,
+                            &module_qualifiers,
+                            hints,
+                            true,
+                        );
+                        // annotate parts of expression being assigned
+                        handle_expression(
+                            &asmt.value,
+                            code,
+                            hints,
+                            line_numbers,
+                            type_parameters,
+                            type_qualifiers,
+                            module_qualifiers,
+                        )
+                    }
                     crate::ast::Statement::Use(use_) => {
                         // todo! they are untyped for some reason?
 
@@ -638,6 +670,7 @@ where
                                 type_qualifiers,
                                 module_qualifiers,
                                 hints,
+                                false,
                             );
                         }
                         for asmt in assignments {
@@ -653,6 +686,7 @@ where
                                     type_qualifiers,
                                     module_qualifiers,
                                     hints,
+                                    false,
                                 );
                             }
                         }
@@ -672,7 +706,7 @@ where
                         body,
                         return_annotation,
                     } => {
-                        // todo: handle merging the
+                        // todo: handle merging the type params of the upper function with this fn's
                         handle_body(
                             body,
                             code,
@@ -745,7 +779,26 @@ where
                         name,
                         left,
                         right,
-                    } => {}
+                    } => {
+                        handle_expression(
+                            left,
+                            code,
+                            hints,
+                            line_numbers,
+                            type_parameters,
+                            type_qualifiers,
+                            module_qualifiers,
+                        );
+                        handle_expression(
+                            right,
+                            code,
+                            hints,
+                            line_numbers,
+                            type_parameters,
+                            type_qualifiers,
+                            module_qualifiers,
+                        )
+                    }
                     TypedExpr::Case {
                         location,
                         typ,
@@ -775,13 +828,6 @@ where
                             )
                         })
                     }
-                    TypedExpr::RecordAccess {
-                        location,
-                        typ,
-                        label,
-                        index,
-                        record,
-                    } => {}
                     TypedExpr::ModuleSelect {
                         location,
                         typ,
@@ -794,23 +840,18 @@ where
                         location,
                         typ,
                         elems,
-                    } => {}
-                    TypedExpr::TupleIndex {
-                        location,
-                        typ,
-                        index,
-                        tuple,
-                    } => {}
-                    TypedExpr::Todo {
-                        location,
-                        message,
-                        type_,
-                    }
-                    | TypedExpr::Panic {
-                        location,
-                        message,
-                        type_,
-                    } => {
+                    } => elems.iter().for_each(|expr| {
+                        handle_expression(
+                            expr,
+                            code,
+                            hints,
+                            line_numbers,
+                            type_parameters,
+                            type_qualifiers,
+                            module_qualifiers,
+                        )
+                    }),
+                    TypedExpr::Todo { message, .. } | TypedExpr::Panic { message, .. } => {
                         message.iter().for_each(|x| {
                             handle_expression(
                                 &x,
@@ -827,15 +868,48 @@ where
                         location,
                         typ,
                         segments,
-                    } => todo!(),
+                    } => segments.iter().for_each(|segment| {
+                        handle_expression(
+                            &segment.value,
+                            code,
+                            hints,
+                            line_numbers,
+                            type_parameters,
+                            type_qualifiers,
+                            module_qualifiers,
+                        )
+                    }),
                     TypedExpr::RecordUpdate {
                         location,
                         typ,
                         spread,
                         args,
-                    } => todo!(),
-                    TypedExpr::NegateBool { location, value }
-                    | TypedExpr::NegateInt { location, value } => handle_expression(
+                    } => {
+                        handle_expression(
+                            &spread,
+                            code,
+                            hints,
+                            line_numbers,
+                            type_parameters,
+                            type_qualifiers,
+                            module_qualifiers,
+                        );
+                        args.iter().for_each(|arg| {
+                            handle_expression(
+                                &arg.value,
+                                code,
+                                hints,
+                                line_numbers,
+                                type_parameters,
+                                type_qualifiers,
+                                module_qualifiers,
+                            )
+                        })
+                    }
+                    TypedExpr::RecordAccess { record: value, .. }
+                    | TypedExpr::TupleIndex { tuple: value, .. }
+                    | TypedExpr::NegateBool { value, .. }
+                    | TypedExpr::NegateInt { value, .. } => handle_expression(
                         &value,
                         code,
                         hints,
@@ -1238,7 +1312,8 @@ fn add_hints_for_definitions<'a>(
                     );
                 }
                 if config.variable_assignments {
-                    hints.extend(
+                    // doesn't properly walk into TypedExpr::Fn
+                    /*hints.extend(
                         TypeAnnotations::from_function_body(
                             function,
                             line_numbers,
@@ -1247,7 +1322,7 @@ fn add_hints_for_definitions<'a>(
                             &type_parameters,
                         )
                         .into_inlay_hints(),
-                    );
+                    );*/
                 }
             }
             Definition::ModuleConstant(constant) if config.module_constants => hints.extend(
