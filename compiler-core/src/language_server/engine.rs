@@ -18,7 +18,7 @@ use camino::Utf8PathBuf;
 use ecow::EcoString;
 use im::HashMap;
 use itertools::Itertools;
-use lsp::InlayHintKind;
+use lsp::{InlayHintKind, Range, TextEdit};
 use lsp_types::{
     self as lsp, CodeAction, Hover, HoverContents, InlayHint, MarkedString, Position, Url,
 };
@@ -506,14 +506,23 @@ where
                     module_qualifiers,
                     type_parameters,
                 );
+
                 if is_let_statement_annotation {
                     type_text = format!(": {}", type_text).to_owned()
                 }
+
                 hints.push(InlayHint {
                     position: position,
                     label: lsp::InlayHintLabel::String(type_text.trim_start().to_owned()),
                     kind: Some(InlayHintKind::TYPE),
-                    text_edits: None,
+                    text_edits: if is_let_statement_annotation {
+                        Some(vec![TextEdit::new(
+                            Range::new(position, position),
+                            type_text,
+                        )])
+                    } else {
+                        None
+                    },
                     tooltip: None,
                     padding_left: Some(true),
                     padding_right: None,
@@ -588,30 +597,32 @@ where
                         module_qualifiers,
                     ),
                     crate::ast::Statement::Assignment(asmt) => {
-                        // annotate let statement
-                        annotate_location_with_type(
-                            &asmt.type_(),
-                            match asmt.pattern {
-                                crate::ast::Pattern::Int { location, .. } => location,
-                                crate::ast::Pattern::Float { location, .. } => location,
-                                crate::ast::Pattern::String { location, .. } => location,
-                                crate::ast::Pattern::Variable { location, .. } => location,
-                                crate::ast::Pattern::VarUsage { location, .. } => location,
-                                crate::ast::Pattern::Assign { location, .. } => location,
-                                crate::ast::Pattern::Discard { location, .. } => location,
-                                crate::ast::Pattern::List { location, .. } => location,
-                                crate::ast::Pattern::Constructor { location, .. } => location,
-                                crate::ast::Pattern::Tuple { location, .. } => location,
-                                crate::ast::Pattern::BitArray { location, .. } => location,
-                                crate::ast::Pattern::StringPrefix { location, .. } => location,
-                            },
-                            &line_numbers,
-                            &type_parameters,
-                            &type_qualifiers,
-                            &module_qualifiers,
-                            hints,
-                            true,
-                        );
+                        if asmt.annotation.is_none() {
+                            // annotate let statement
+                            annotate_location_with_type(
+                                &asmt.type_(),
+                                match asmt.pattern {
+                                    crate::ast::Pattern::Int { location, .. } => location,
+                                    crate::ast::Pattern::Float { location, .. } => location,
+                                    crate::ast::Pattern::String { location, .. } => location,
+                                    crate::ast::Pattern::Variable { location, .. } => location,
+                                    crate::ast::Pattern::VarUsage { location, .. } => location,
+                                    crate::ast::Pattern::Assign { location, .. } => location,
+                                    crate::ast::Pattern::Discard { location, .. } => location,
+                                    crate::ast::Pattern::List { location, .. } => location,
+                                    crate::ast::Pattern::Constructor { location, .. } => location,
+                                    crate::ast::Pattern::Tuple { location, .. } => location,
+                                    crate::ast::Pattern::BitArray { location, .. } => location,
+                                    crate::ast::Pattern::StringPrefix { location, .. } => location,
+                                },
+                                &line_numbers,
+                                &type_parameters,
+                                &type_qualifiers,
+                                &module_qualifiers,
+                                hints,
+                                true,
+                            );
+                        }
                         // annotate parts of expression being assigned
                         handle_expression(
                             &asmt.value,
@@ -673,6 +684,15 @@ where
                                 false,
                             );
                         }
+                        handle_expression(
+                            &finally,
+                            code,
+                            hints,
+                            line_numbers,
+                            type_parameters,
+                            type_qualifiers,
+                            module_qualifiers,
+                        );
                         for asmt in assignments {
                             if &(code
                                 [(asmt.location.end as usize)..(asmt.location.end as usize) + 1])
@@ -689,6 +709,16 @@ where
                                     false,
                                 );
                             }
+
+                            handle_expression(
+                                &asmt.value,
+                                code,
+                                hints,
+                                line_numbers,
+                                type_parameters,
+                                type_qualifiers,
+                                module_qualifiers,
+                            );
                         }
                     }
                     TypedExpr::Var {

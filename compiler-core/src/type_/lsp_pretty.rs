@@ -4,13 +4,12 @@ use ecow::EcoString;
 use im::HashMap;
 use itertools::Itertools;
 
-
 use crate::ast::TypeAst;
 
 use super::{pretty::Printer, Type, TypeVar};
 
 #[derive(Debug)]
-pub struct LspPrinter<'a, > {
+pub struct LspPrinter<'a> {
     pretty_printer: Printer,
     type_qualifiers: &'a HashMap<EcoString, EcoString>,
     module_qualifiers: &'a HashMap<EcoString, EcoString>,
@@ -27,7 +26,7 @@ impl<'a> LspPrinter<'a> {
             pretty_printer: Printer::default(),
             type_qualifiers,
             module_qualifiers,
-            type_parameters
+            type_parameters,
         }
     }
 
@@ -41,10 +40,16 @@ impl<'a> LspPrinter<'a> {
             Type::Named {
                 name, args, module, ..
             } => {
-                let key = module.clone() + "." + name.clone();
-                let res = self.type_qualifiers.get(&key).unwrap_or(&key).to_string();
+                //let key = module.clone() + "." + name.clone();
+                //let res = self.type_qualifiers.get(&key).unwrap_or(&key).to_string();
                 if args.is_empty() {
                     if module == "gleam" {
+                        name.to_string()
+                    } else {
+                        let module = module.split_once("/").unwrap().1;
+                        format!("{module}.{name}").to_string()
+                    }
+                    /*if module == "gleam" {
                         // Ignoring module names for in-built gleam types like Int
                         name.to_string()
                     } else if self.type_qualifiers.contains_key(&key) {
@@ -56,9 +61,19 @@ impl<'a> LspPrinter<'a> {
                             + "."
                             + name.clone())
                         .to_string()
-                    }
+                    }*/
                 } else {
-                    res + "(" + &self.args_to_string(args) + ")"
+                    //res + "(" + &self.args_to_string(args) + ")"
+                    format!(
+                        "{}({})",
+                        if module == "gleam" {
+                            name.to_string()
+                        } else {
+                            let module = module.split_once("/").unwrap().1;
+                            format!("{module}.{name}").to_string()
+                        },
+                        &self.args_to_string(args)
+                    )
                 }
             }
             Type::Fn { args, retrn } => {
@@ -68,13 +83,14 @@ impl<'a> LspPrinter<'a> {
             Type::Var { type_: typ, .. } => match *typ.borrow() {
                 TypeVar::Link { type_: ref typ, .. } => self.print(typ),
                 TypeVar::Unbound { id, .. } | TypeVar::Generic { id, .. } => {
-                    if let Some(crate::ast::TypeAst::Var(type_var)) = self.type_parameters.get(&id) {
+                    if let Some(crate::ast::TypeAst::Var(type_var)) = self.type_parameters.get(&id)
+                    {
                         return type_var.name.to_string();
                     }
-                    self
-                    .pretty_printer
-                    .generic_type_var(id)
-                    .to_pretty_string(80)},
+                    self.pretty_printer
+                        .generic_type_var(id)
+                        .to_pretty_string(80)
+                }
             },
 
             Type::Tuple { elems, .. } => "#(".to_string() + &self.args_to_string(elems) + ")",
