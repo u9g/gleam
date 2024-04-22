@@ -1,7 +1,7 @@
 use crate::{
     ast::{
-        Arg, AssignName, Definition, Function, Import, ModuleConstant, TypedDefinition, TypedExpr,
-        TypedPattern,
+        Arg, AssignName, Definition, Function, Import, ModuleConstant, SrcSpan, TypedDefinition,
+        TypedExpr, TypedPattern,
     },
     build::{Located, Module},
     config::PackageConfig,
@@ -482,6 +482,87 @@ where
 
             let code = &module.code;
 
+            fn annotate_location_with_type(
+                type_: &Type,
+                span: SrcSpan,
+                line_numbers: &LineNumbers,
+                type_parameters: &HashMap<u64, crate::ast::TypeAst>,
+                type_qualifiers: &HashMap<EcoString, EcoString>,
+                module_qualifiers: &HashMap<EcoString, EcoString>,
+                hints: &mut Vec<InlayHint>,
+            ) {
+                let linecol = line_numbers.line_and_column_number(span.end);
+                if hints.iter().any(|x| {
+                    x.position.line == linecol.line - 1
+                        && x.position.character == linecol.column - 1
+                }) {
+                    return;
+                }
+                let position = Position::new(linecol.line - 1, linecol.column - 1);
+                let type_text = TypeAnnotations::generate_type_text(
+                    &type_,
+                    type_qualifiers,
+                    module_qualifiers,
+                    type_parameters,
+                );
+                hints.push(InlayHint {
+                    position: position,
+                    label: lsp::InlayHintLabel::String(type_text.trim_start().to_owned()),
+                    kind: Some(InlayHintKind::TYPE),
+                    text_edits: None,
+                    tooltip: None,
+                    padding_left: Some(true),
+                    padding_right: None,
+                    data: None,
+                })
+            }
+
+            fn handle_body(
+                statements: &vec1::Vec1<crate::ast::Statement<Arc<Type>, TypedExpr>>,
+                code: &EcoString,
+                hints: &mut Vec<InlayHint>,
+                line_numbers: &LineNumbers,
+                type_parameters: &HashMap<u64, crate::ast::TypeAst>,
+                type_qualifiers: &HashMap<EcoString, EcoString>,
+                module_qualifiers: &HashMap<EcoString, EcoString>,
+            ) {
+                for stmt in statements {
+                    // annotate pipe expressions
+                    handle_statement(
+                        stmt,
+                        code,
+                        hints,
+                        &line_numbers,
+                        &type_parameters,
+                        &type_qualifiers,
+                        &module_qualifiers,
+                    )
+                }
+
+                // annotate final item in body
+                if let Some(last_stmt) = statements.iter().last() {
+                    match last_stmt {
+                        crate::ast::Statement::Expression(expr) => {
+                            // We don't annotate implicit returns of Panic because
+                            // Panic is the only thing in the body when you add only a
+                            // method signature and use @external's for implementations
+                            if !matches!(expr, crate::ast::TypedExpr::Panic { .. }) {
+                                annotate_location_with_type(
+                                    &expr.type_(),
+                                    expr.location(),
+                                    &line_numbers,
+                                    &type_parameters,
+                                    &type_qualifiers,
+                                    &module_qualifiers,
+                                    hints,
+                                );
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
             fn handle_statement(
                 stmt: &crate::ast::Statement<Arc<Type>, TypedExpr>,
                 code: &EcoString,
@@ -531,76 +612,48 @@ where
                     TypedExpr::Block {
                         location,
                         statements,
-                    } => statements.iter().for_each(|stmt| {
-                        handle_statement(
-                            stmt,
-                            code,
-                            hints,
-                            line_numbers,
-                            type_parameters,
-                            type_qualifiers,
-                            module_qualifiers,
-                        )
-                    }),
+                    } => handle_body(
+                        statements,
+                        code,
+                        hints,
+                        line_numbers,
+                        type_parameters,
+                        type_qualifiers,
+                        module_qualifiers,
+                    ),
                     TypedExpr::Pipeline {
                         location,
                         assignments,
                         finally,
                     } => {
-                        tracing::info!("Pipeline Finder>> found pipeline!");
                         if &(code[(finally.location().end as usize)
                             ..(finally.location().end as usize) + 1])
                             == "\n"
                         {
-                            let linecol =
-                                line_numbers.line_and_column_number(finally.location().end);
-                            let position = Position::new(linecol.line - 1, linecol.column - 1);
-                            let type_text = TypeAnnotations::generate_type_text(
+                            annotate_location_with_type(
                                 &finally.type_(),
+                                finally.location(),
+                                line_numbers,
+                                type_parameters,
                                 type_qualifiers,
                                 module_qualifiers,
-                                type_parameters,
+                                hints,
                             );
-                            hints.push(InlayHint {
-                                position: position,
-                                label: lsp::InlayHintLabel::String(
-                                    type_text.trim_start().to_owned(),
-                                ),
-                                kind: Some(InlayHintKind::TYPE),
-                                text_edits: None,
-                                tooltip: None,
-                                padding_left: Some(true),
-                                padding_right: None,
-                                data: None,
-                            })
                         }
                         for asmt in assignments {
-                            // tracing::info!(count=%loaded.to_compile.len(), "analysing_modules");
                             if &(code
                                 [(asmt.location.end as usize)..(asmt.location.end as usize) + 1])
                                 == "\n"
                             {
-                                let linecol =
-                                    line_numbers.line_and_column_number(asmt.location.end);
-                                let position = Position::new(linecol.line - 1, linecol.column - 1);
-                                let type_text = TypeAnnotations::generate_type_text(
+                                annotate_location_with_type(
                                     &asmt.type_(),
+                                    asmt.location,
+                                    line_numbers,
+                                    type_parameters,
                                     type_qualifiers,
                                     module_qualifiers,
-                                    type_parameters,
+                                    hints,
                                 );
-                                hints.push(InlayHint {
-                                    position: position,
-                                    label: lsp::InlayHintLabel::String(
-                                        type_text.trim_start().to_owned(),
-                                    ),
-                                    kind: Some(InlayHintKind::TYPE),
-                                    text_edits: None,
-                                    tooltip: None,
-                                    padding_left: Some(true),
-                                    padding_right: None,
-                                    data: None,
-                                })
                             }
                         }
                     }
@@ -618,9 +671,10 @@ where
                         args,
                         body,
                         return_annotation,
-                    } => body.iter().for_each(|stmt| {
-                        handle_statement(
-                            stmt,
+                    } => {
+                        // todo: handle merging the
+                        handle_body(
+                            body,
                             code,
                             hints,
                             line_numbers,
@@ -628,7 +682,7 @@ where
                             type_qualifiers,
                             module_qualifiers,
                         )
-                    }),
+                    }
                     TypedExpr::List {
                         location,
                         typ,
@@ -804,19 +858,16 @@ where
                 })
                 .for_each(|x| match x {
                     Definition::Function(f) => {
-                        f.body.iter().for_each(|stmt| {
-                            let type_parameters =
-                                TypeAnnotations::extract_type_parameters_from_fn(f);
-                            handle_statement(
-                                stmt,
-                                code,
-                                &mut hints,
-                                &line_numbers,
-                                &type_parameters,
-                                &type_qualifiers,
-                                &module_qualifiers,
-                            )
-                        });
+                        let type_parameters = TypeAnnotations::extract_type_parameters_from_fn(f);
+                        handle_body(
+                            &f.body,
+                            code,
+                            &mut hints,
+                            &line_numbers,
+                            &type_parameters,
+                            &type_qualifiers,
+                            &module_qualifiers,
+                        );
                     }
                     _ => {}
                 });
