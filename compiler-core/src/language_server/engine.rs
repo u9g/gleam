@@ -511,7 +511,7 @@ where
                         module_qualifiers,
                     ),
                     crate::ast::Statement::Use(use_) => {
-                        // todo!
+                        // todo! they are untyped for some reason?
 
                         // handle_expression(use_.)
                     }
