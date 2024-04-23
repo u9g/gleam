@@ -601,20 +601,7 @@ where
                             // annotate let statement
                             annotate_location_with_type(
                                 &asmt.type_(),
-                                match asmt.pattern {
-                                    crate::ast::Pattern::Int { location, .. } => location,
-                                    crate::ast::Pattern::Float { location, .. } => location,
-                                    crate::ast::Pattern::String { location, .. } => location,
-                                    crate::ast::Pattern::Variable { location, .. } => location,
-                                    crate::ast::Pattern::VarUsage { location, .. } => location,
-                                    crate::ast::Pattern::Assign { location, .. } => location,
-                                    crate::ast::Pattern::Discard { location, .. } => location,
-                                    crate::ast::Pattern::List { location, .. } => location,
-                                    crate::ast::Pattern::Constructor { location, .. } => location,
-                                    crate::ast::Pattern::Tuple { location, .. } => location,
-                                    crate::ast::Pattern::BitArray { location, .. } => location,
-                                    crate::ast::Pattern::StringPrefix { location, .. } => location,
-                                },
+                                asmt.pattern.location(),
                                 &line_numbers,
                                 &type_parameters,
                                 &type_qualifiers,
@@ -635,9 +622,7 @@ where
                         )
                     }
                     crate::ast::Statement::Use(use_) => {
-                        // todo! they are untyped for some reason?
-
-                        // handle_expression(use_.)
+                        // Handled in handle_expression -> TypedExpr::Call.args -> arg where arg.implicit == true
                     }
                 }
             }
@@ -800,7 +785,32 @@ where
                                 type_parameters,
                                 type_qualifiers,
                                 module_qualifiers,
-                            )
+                            );
+
+                            if x.implicit {
+                                if let TypedExpr::Fn {
+                                    location,
+                                    typ,
+                                    is_capture,
+                                    args,
+                                    body,
+                                    return_annotation,
+                                } = &x.value
+                                {
+                                    args.iter().for_each(|y| {
+                                        annotate_location_with_type(
+                                            &y.type_,
+                                            y.location,
+                                            line_numbers,
+                                            type_parameters,
+                                            type_qualifiers,
+                                            module_qualifiers,
+                                            hints,
+                                            true,
+                                        )
+                                    })
+                                }
+                            }
                         });
                     }
                     TypedExpr::BinOp {
@@ -963,6 +973,7 @@ where
                 .for_each(|x| match x {
                     Definition::Function(f) => {
                         let type_parameters = TypeAnnotations::extract_type_parameters_from_fn(f);
+
                         handle_body(
                             &f.body,
                             code,
