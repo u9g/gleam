@@ -71,6 +71,17 @@ impl FeedbackBookKeeper {
         }
 
         for warning in warnings {
+            // do not push unused import warnings (i don't want them)
+            if matches!(
+                warning,
+                Warning::Type {
+                    warning: crate::type_::Warning::UnusedImportedModule { .. },
+                    ..
+                }
+            ) {
+                continue;
+            }
+
             self.insert_warning(&mut feedback, warning);
         }
 
