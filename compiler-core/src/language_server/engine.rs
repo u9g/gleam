@@ -1,7 +1,7 @@
 use crate::{
     ast::{
-        Arg, AssignName, Definition, Function, Import, ModuleConstant, SrcSpan, TypedDefinition,
-        TypedExpr, TypedPattern,
+        Arg, AssignName, Definition, Function, Import, ModuleConstant, SrcSpan, Statement,
+        TypedDefinition, TypedExpr, TypedPattern,
     },
     build::{Located, Module},
     config::PackageConfig,
@@ -24,6 +24,7 @@ use lsp_types::{
 };
 use std::sync::Arc;
 use strum::IntoEnumIterator;
+use vec1::Vec1;
 
 use super::{
     code_action::CodeActionBuilder,
@@ -530,8 +531,42 @@ where
                 })
             }
 
+            fn handle_function(
+                args: &Vec<Arg<Arc<Type>>>,
+                body: &Vec1<Statement<Arc<Type>, TypedExpr>>,
+                code: &EcoString,
+                hints: &mut Vec<InlayHint>,
+                line_numbers: &LineNumbers,
+                type_parameters: &HashMap<u64, crate::ast::TypeAst>,
+                type_qualifiers: &HashMap<EcoString, EcoString>,
+                module_qualifiers: &HashMap<EcoString, EcoString>,
+            ) {
+                args.iter().for_each(|arg| {
+                    annotate_location_with_type(
+                        &arg.type_,
+                        arg.location,
+                        line_numbers,
+                        type_parameters,
+                        type_qualifiers,
+                        module_qualifiers,
+                        hints,
+                        true,
+                    )
+                });
+
+                handle_body(
+                    body,
+                    code,
+                    hints,
+                    line_numbers,
+                    type_parameters,
+                    type_qualifiers,
+                    module_qualifiers,
+                )
+            }
+
             fn handle_body(
-                statements: &vec1::Vec1<crate::ast::Statement<Arc<Type>, TypedExpr>>,
+                statements: &Vec1<Statement<Arc<Type>, TypedExpr>>,
                 code: &EcoString,
                 hints: &mut Vec<InlayHint>,
                 line_numbers: &LineNumbers,
@@ -722,7 +757,8 @@ where
                         return_annotation,
                     } => {
                         // todo: handle merging the type params of the upper function with this fn's
-                        handle_body(
+                        handle_function(
+                            args,
                             body,
                             code,
                             hints,
@@ -974,7 +1010,8 @@ where
                     Definition::Function(f) => {
                         let type_parameters = TypeAnnotations::extract_type_parameters_from_fn(f);
 
-                        handle_body(
+                        handle_function(
+                            &f.arguments,
                             &f.body,
                             code,
                             &mut hints,
@@ -1339,9 +1376,9 @@ fn add_hints_for_definitions<'a>(
     for def in definitions {
         match def {
             Definition::Function(function) => {
-                let type_parameters = TypeAnnotations::extract_type_parameters_from_fn(function);
+                // let type_parameters = TypeAnnotations::extract_type_parameters_from_fn(function);
                 if config.function_definitions {
-                    hints.extend(
+                    /*hints.extend(
                         TypeAnnotations::from_function_definition(
                             function,
                             line_numbers,
@@ -1350,7 +1387,7 @@ fn add_hints_for_definitions<'a>(
                             &type_parameters,
                         )
                         .into_inlay_hints(),
-                    );
+                    );*/
                 }
                 if config.variable_assignments {
                     // doesn't properly walk into TypedExpr::Fn
