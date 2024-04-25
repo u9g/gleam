@@ -46,7 +46,10 @@ impl<'a> LspPrinter<'a> {
                     if module == "gleam" {
                         name.to_string()
                     } else {
-                        let module = module.split_once("/").unwrap().1;
+                        let module = module
+                            .split_once("/")
+                            .map(|x| x.1)
+                            .unwrap_or_else(|| &module);
                         format!("{module}.{name}").to_string()
                     }
                     /*if module == "gleam" {
