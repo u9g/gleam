@@ -546,6 +546,7 @@ fn register_value_from_function(
         arity: args.len(),
         location: *location,
         implementations: *implementations,
+        holding_module: module_name.clone(),
     };
     environment.insert_variable(name.clone(), variant, typ, *public, deprecation.clone());
     if !public {
@@ -673,6 +674,7 @@ fn infer_function(
         arity: args.len(),
         location,
         implementations,
+        holding_module: module_name.to_owned(),
     };
 
     environment.insert_variable(
@@ -1161,6 +1163,7 @@ fn generalise_function(
         arity: args.len(),
         location,
         implementations,
+        holding_module: module_name.to_owned(),
     };
     environment.insert_variable(
         name.clone(),

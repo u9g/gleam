@@ -269,6 +269,7 @@ impl<'a> ModuleEncoder<'a> {
                 location,
                 documentation: doc,
                 implementations,
+                holding_module,
             } => {
                 let mut builder = builder.init_module_fn();
                 builder.set_name(name);

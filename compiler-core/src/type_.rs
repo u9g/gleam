@@ -313,6 +313,7 @@ pub enum ValueConstructorVariant {
     ModuleFn {
         name: EcoString,
         field_map: Option<FieldMap>,
+        holding_module: EcoString,
         module: EcoString,
         arity: usize,
         location: SrcSpan,

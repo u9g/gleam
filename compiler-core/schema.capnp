@@ -117,6 +117,7 @@ struct ValueConstructorVariant {
       name @3 :Text;
       fieldMap @4 :Option(FieldMap);
       module @5 :Text;
+      holdingModule @20 :Text;
       arity @6 :UInt16;
       location @7 :SrcSpan;
       documentation @15 :Text;

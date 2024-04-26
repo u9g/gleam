@@ -3023,6 +3023,7 @@ pub mod value_constructor_variant {
       self.builder.get_pointer_field(3).clear();
       self.builder.get_pointer_field(4).clear();
       self.builder.get_pointer_field(5).clear();
+      self.builder.get_pointer_field(6).clear();
       ::capnp::traits::FromStructBuilder::new(self.builder)
     }
     #[inline]
@@ -3071,7 +3072,7 @@ pub mod value_constructor_variant {
   }
   mod _private {
     use capnp::private::layout;
-    pub const STRUCT_SIZE: layout::StructSize = layout::StructSize { data: 1, pointers: 6 };
+    pub const STRUCT_SIZE: layout::StructSize = layout::StructSize { data: 1, pointers: 7 };
     pub const TYPE_ID: u64 = 0xe14c_79e9_2bd0_a81a;
   }
   pub enum Which<A0,A1,A2> {
@@ -3319,7 +3320,7 @@ pub mod value_constructor_variant {
     }
     mod _private {
       use capnp::private::layout;
-      pub const STRUCT_SIZE: layout::StructSize = layout::StructSize { data: 1, pointers: 6 };
+      pub const STRUCT_SIZE: layout::StructSize = layout::StructSize { data: 1, pointers: 7 };
       pub const TYPE_ID: u64 = 0x9579_9d69_8196_fbd0;
     }
   }
@@ -3421,6 +3422,14 @@ pub mod value_constructor_variant {
       #[inline]
       pub fn has_implementations(&self) -> bool {
         !self.reader.get_pointer_field(5).is_null()
+      }
+      #[inline]
+      pub fn get_holding_module(self) -> ::capnp::Result<::capnp::text::Reader<'a>> {
+        ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(6), ::core::option::Option::None)
+      }
+      #[inline]
+      pub fn has_holding_module(&self) -> bool {
+        !self.reader.get_pointer_field(6).is_null()
       }
     }
 
@@ -3576,6 +3585,22 @@ pub mod value_constructor_variant {
       pub fn has_implementations(&self) -> bool {
         !self.builder.get_pointer_field(5).is_null()
       }
+      #[inline]
+      pub fn get_holding_module(self) -> ::capnp::Result<::capnp::text::Builder<'a>> {
+        ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(6), ::core::option::Option::None)
+      }
+      #[inline]
+      pub fn set_holding_module(&mut self, value: ::capnp::text::Reader<'_>)  {
+        self.builder.get_pointer_field(6).set_text(value);
+      }
+      #[inline]
+      pub fn init_holding_module(self, size: u32) -> ::capnp::text::Builder<'a> {
+        self.builder.get_pointer_field(6).init_text(size)
+      }
+      #[inline]
+      pub fn has_holding_module(&self) -> bool {
+        !self.builder.get_pointer_field(6).is_null()
+      }
     }
 
     pub struct Pipeline { _typeless: ::capnp::any_pointer::Pipeline }
@@ -3597,7 +3622,7 @@ pub mod value_constructor_variant {
     }
     mod _private {
       use capnp::private::layout;
-      pub const STRUCT_SIZE: layout::StructSize = layout::StructSize { data: 1, pointers: 6 };
+      pub const STRUCT_SIZE: layout::StructSize = layout::StructSize { data: 1, pointers: 7 };
       pub const TYPE_ID: u64 = 0xaea6_15c5_9871_3779;
     }
   }
@@ -3872,7 +3897,7 @@ pub mod value_constructor_variant {
     }
     mod _private {
       use capnp::private::layout;
-      pub const STRUCT_SIZE: layout::StructSize = layout::StructSize { data: 1, pointers: 6 };
+      pub const STRUCT_SIZE: layout::StructSize = layout::StructSize { data: 1, pointers: 7 };
       pub const TYPE_ID: u64 = 0xf00b_1526_e923_3dd5;
     }
   }

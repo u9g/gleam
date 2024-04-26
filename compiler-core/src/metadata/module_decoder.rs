@@ -457,6 +457,7 @@ impl ModuleDecoder {
             location: self.src_span(&reader.get_location()?)?,
             documentation: self.optional_string(reader.get_documentation()?),
             implementations: self.implementations(reader.get_implementations()?),
+            holding_module: reader.get_holding_module()?.into(),
         })
     }
 
