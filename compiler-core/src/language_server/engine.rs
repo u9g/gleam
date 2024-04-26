@@ -11,7 +11,7 @@ use crate::{
     },
     line_numbers::LineNumbers,
     paths::ProjectPaths,
-    type_::{pretty::Printer, PreludeType, Type, ValueConstructorVariant},
+    type_::{pretty::Printer, ModuleValueConstructor, PreludeType, Type, ValueConstructorVariant},
     Error, Result, Warning,
 };
 use camino::Utf8PathBuf;
@@ -337,6 +337,7 @@ where
                         lines,
                         module,
                         &this.hex_deps,
+                        &this.compiler.modules,
                     ))
                 }
                 Located::Arg(arg) => Some(hover_for_function_argument(arg, lines)),
@@ -1223,6 +1224,7 @@ fn hover_for_expression(
     line_numbers: LineNumbers,
     module: Option<&Module>,
     hex_deps: &std::collections::HashSet<EcoString>,
+    modules: &std::collections::HashMap<EcoString, Module>,
 ) -> Hover {
     let documentation = expression.get_documentation().unwrap_or_default();
 
@@ -1234,13 +1236,59 @@ fn hover_for_expression(
         .unwrap_or("".to_string());
 
     // Show the type of the hovered node to the user
+    let module_with_location = match expression {
+        TypedExpr::Var { constructor, .. } => {
+            match &constructor.variant {
+                ValueConstructorVariant::Record {
+                    location, module, ..
+                } => Some((module, location.to_owned())),
+                ValueConstructorVariant::ModuleFn {
+                    module, location, ..
+                } => Some((module, location.to_owned())),
+                ValueConstructorVariant::ModuleConstant {
+                    location, module, ..
+                } => Some((module, location.to_owned())),
+                // todo: add hover for LocalConstant
+                ValueConstructorVariant::LocalConstant { .. } => None,
+                _ => None,
+            }
+        }
+        TypedExpr::ModuleSelect {
+            module_name,
+            constructor,
+            ..
+        } if modules.get(module_name).is_some() => {
+            let location = match constructor {
+                ModuleValueConstructor::Fn { location, .. }
+                | ModuleValueConstructor::Record { location, .. } => location.to_owned(),
+                ModuleValueConstructor::Constant {
+                    location, literal, ..
+                } => SrcSpan {
+                    start: location.start,
+                    end: literal.location().end,
+                },
+            };
+            Some((module_name, location))
+        }
+        _ => None,
+    };
+
+    if let Some((module_name, location)) = module_with_location {
+        if let Some(module) = modules.get(module_name) {
+            let contents = format!(
+                "```gleam\n{}\n```",
+                &module.code[location.start as usize..location.end as usize]
+            );
+            return Hover {
+                contents: HoverContents::Scalar(MarkedString::String(contents)),
+                range: Some(src_span_to_lsp_range(expression.location(), &line_numbers)),
+            };
+        }
+    }
+
     let type_ = Printer::new().pretty_print(expression.type_().as_ref(), 0);
-    let contents = format!(
-        "```gleam
-{type_}
-```
-{documentation}{link_section}"
-    );
+    let contents = format!("```gleam\n{type_}\n```\n{documentation}{link_section}");
+
     Hover {
         contents: HoverContents::Scalar(MarkedString::String(contents)),
         range: Some(src_span_to_lsp_range(expression.location(), &line_numbers)),
