@@ -821,8 +821,16 @@ impl ValueConstructor {
                 span: literal.location(),
             },
 
-            ValueConstructorVariant::ModuleFn { location, .. }
-            | ValueConstructorVariant::LocalVariable { location } => DefinitionLocation {
+            ValueConstructorVariant::ModuleFn {
+                location,
+                holding_module,
+                ..
+            } => DefinitionLocation {
+                module: Some(&holding_module),
+                span: *location,
+            },
+
+            ValueConstructorVariant::LocalVariable { location } => DefinitionLocation {
                 module: None,
                 span: *location,
             },
