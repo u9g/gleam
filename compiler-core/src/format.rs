@@ -1070,7 +1070,13 @@ impl<'comments> Formatter<'comments> {
         let first = self.expr(first).group();
         docs.push(self.operator_side(first, 5, first_precedence));
 
-        for expr in expressions.iter().skip(1) {
+        if expressions.len() - 1 == 1
+            && match &expressions[0] {
+                UntypedExpr::Var { name, .. } => name.ends_with("key"),
+                _ => false,
+            }
+        {
+            let expr = &expressions[1];
             let comments = self.pop_comments(expr.location().start);
             let doc = match expr {
                 UntypedExpr::Fn {
@@ -1089,9 +1095,32 @@ impl<'comments> Formatter<'comments> {
 
                 _ => self.expr(expr),
             };
-            docs.push(line());
-            docs.push(commented("|> ".to_doc(), comments));
+            docs.push(commented(" |> ".to_doc(), comments));
             docs.push(self.operator_side(doc, 4, expr.binop_precedence()));
+        } else {
+            for expr in expressions.iter().skip(1) {
+                let comments = self.pop_comments(expr.location().start);
+                let doc = match expr {
+                    UntypedExpr::Fn {
+                        is_capture: true,
+                        body,
+                        ..
+                    } => {
+                        let body = match body.first() {
+                            Statement::Expression(expression) => expression,
+                            Statement::Assignment(_) | Statement::Use(_) => {
+                                unreachable!("Non expression capture body")
+                            }
+                        };
+                        self.pipe_capture_right_hand_side(body)
+                    }
+
+                    _ => self.expr(expr),
+                };
+                docs.push(line());
+                docs.push(commented("|> ".to_doc(), comments));
+                docs.push(self.operator_side(doc, 4, expr.binop_precedence()));
+            }
         }
 
         docs.to_doc().force_break()
