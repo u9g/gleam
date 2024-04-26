@@ -1243,8 +1243,10 @@ fn hover_for_expression(
                     location, module, ..
                 } => Some((module, location.to_owned())),
                 ValueConstructorVariant::ModuleFn {
-                    module, location, ..
-                } => Some((module, location.to_owned())),
+                    location,
+                    holding_module,
+                    ..
+                } => Some((holding_module, location.to_owned())),
                 ValueConstructorVariant::ModuleConstant {
                     location, module, ..
                 } => Some((module, location.to_owned())),
