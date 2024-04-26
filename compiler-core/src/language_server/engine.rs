@@ -272,6 +272,15 @@ where
                 &type_qualifiers,
                 &module_qualifiers,
             );
+            // Replace qualified type with import
+            code_action_add_import(module, &params, &mut actions);
+            // code_action_(
+            //     module,
+            //     &params,
+            //     &mut actions,
+            //     &type_qualifiers,
+            //     &module_qualifiers,
+            // );
 
             Ok(if actions.is_empty() {
                 None
@@ -307,6 +316,8 @@ where
                 Some(value) => value,
                 None => return Ok(None),
             };
+
+            // tracing::info!(">> {found:#?}");
 
             Ok(match found {
                 Located::Statement(_) => None, // TODO: hover for statement
@@ -1240,6 +1251,84 @@ fn hover_for_expression(
 fn range_includes(outer: &lsp_types::Range, inner: &lsp_types::Range) -> bool {
     (outer.start >= inner.start && outer.start <= inner.end)
         || (outer.end >= inner.start && outer.end <= inner.end)
+}
+
+fn code_action_add_import(
+    module: &Module,
+    params: &lsp::CodeActionParams,
+    actions: &mut Vec<CodeAction>,
+) {
+    let uri = &params.text_document.uri;
+    let Some((line_numbers, located)) = module_node_at_position(&params.range.start, module) else {
+        tracing::info!("returning bc hover=none");
+        return;
+    };
+
+    match located {
+        Located::Expression(TypedExpr::ModuleSelect {
+            location,
+            typ,
+            label,
+            module_name,
+            module_alias,
+            constructor,
+        }) => {
+            let range = src_span_to_lsp_range(
+                SrcSpan {
+                    start: location.start - module_alias.len() as u32,
+                    end: location.start + 1,
+                },
+                &line_numbers,
+            );
+
+            let mut changes = vec![TextEdit {
+                range,
+                new_text: "".into(),
+            }];
+
+            let import = module.ast.definitions.iter().find(|x| {
+                if let Definition::Import(import) = x {
+                    // todo: handle aliased imports
+                    return import.module.as_ref() == module_name.as_ref();
+                };
+                false
+            });
+
+            // todo: handle type imports
+            if let Some(Definition::Import(import)) = import {
+                if import.unqualified_types.is_empty() && import.unqualified_values.is_empty() {
+                    changes.push(TextEdit {
+                        range: src_span_to_lsp_range(
+                            SrcSpan {
+                                start: import.location.end,
+                                end: import.location.end,
+                            },
+                            &line_numbers,
+                        ),
+                        new_text: format!(".{{{}}}", label.to_owned()).to_owned(),
+                    })
+                } else {
+                    changes.push(TextEdit {
+                        range: src_span_to_lsp_range(
+                            SrcSpan {
+                                start: import.location.end - 1,
+                                end: import.location.end - 1,
+                            },
+                            &line_numbers,
+                        ),
+                        new_text: format!(", {}", label.to_owned()).to_owned(),
+                    })
+                }
+            }
+
+            CodeActionBuilder::new("Replace qualified type with import")
+                .kind(lsp_types::CodeActionKind::QUICKFIX)
+                .changes(uri.clone(), changes)
+                .preferred(true)
+                .push_to(actions);
+        }
+        _ => {}
+    }
 }
 
 fn code_action_unused_imports(
