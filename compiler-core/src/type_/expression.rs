@@ -1837,7 +1837,30 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         .ok_or_else(|| Error::UnknownVariable {
                             location: *location,
                             name: name.clone(),
-                            variables: self.environment.local_value_names(),
+                            variables: {
+                                let g = self
+                                    .environment
+                                    .imported_modules
+                                    .iter()
+                                    .map(|(module_name, (_, module_interface))| {
+                                        module_interface
+                                            .values
+                                            .iter()
+                                            .map(|exported_value| {
+                                                EcoString::from(format!(
+                                                    "{}.{}",
+                                                    module_name, exported_value.0
+                                                ))
+                                            })
+                                            .collect_vec()
+                                    })
+                                    .flatten()
+                                    .collect_vec();
+
+                                let mut variables = self.environment.local_value_names();
+                                variables.extend(g);
+                                variables
+                            },
                         })?;
 
                 // Register the value as seen for detection of unused values

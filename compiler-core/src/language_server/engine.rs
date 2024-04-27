@@ -1310,7 +1310,6 @@ fn code_action_add_import(
 ) {
     let uri = &params.text_document.uri;
     let Some((line_numbers, located)) = module_node_at_position(&params.range.start, module) else {
-        tracing::info!("returning bc hover=none");
         return;
     };
 

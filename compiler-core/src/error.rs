@@ -1547,21 +1547,38 @@ constructing a new record with its values."
                     location,
                     variables,
                     name,
-                } => Diagnostic {
-                    title: "Unknown variable".into(),
-                    text: wrap_format!("The name `{name}` is not in scope here."),
-                    hint: None,
-                    level: Level::Error,
-                    location: Some(Location {
-                        label: Label {
-                            text: did_you_mean(name, variables),
-                            span: *location,
-                        },
-                        path: path.clone(),
-                        src: src.clone(),
-                        extra_labels: vec![],
-                    }),
-                },
+                } => {
+                    let did_you_mean_this = variables
+                        .iter()
+                        .filter(|&option| option != crate::ast::CAPTURE_VARIABLE)
+                        .sorted()
+                        .min_by_key(|option| {
+                            strsim::levenshtein(
+                                option
+                                    .split_once(".")
+                                    .map(|(_, x)| x)
+                                    .unwrap_or_else(|| option),
+                                name,
+                            )
+                        })
+                        .map(|option| format!("Did you mean `{option}`?"));
+
+                    Diagnostic {
+                        title: "Unknown variable".into(),
+                        text: wrap_format!("The name `{name}` is not in scope here."),
+                        hint: None,
+                        level: Level::Error,
+                        location: Some(Location {
+                            label: Label {
+                                text: did_you_mean_this,
+                                span: *location,
+                            },
+                            path: path.clone(),
+                            src: src.clone(),
+                            extra_labels: vec![],
+                        }),
+                    }
+                }
 
                 TypeError::PrivateTypeLeak { location, leaked } => {
                     let mut printer = Printer::new();
