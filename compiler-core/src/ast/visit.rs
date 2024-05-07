@@ -46,7 +46,7 @@ use ecow::EcoString;
 use crate::type_::Type;
 
 use super::{
-    BinOp, BitArrayOption, Definition, SrcSpan, Statement, TypeAst, TypedArg, TypedAssignment,
+    Arg, BinOp, BitArrayOption, Definition, SrcSpan, Statement, TypeAst, TypedArg, TypedAssignment,
     TypedClause, TypedDefinition, TypedExpr, TypedExprBitArraySegment, TypedFunction, TypedModule,
     TypedRecordUpdateArg, TypedStatement, Use,
 };
@@ -62,6 +62,10 @@ pub trait Visit<'ast> {
 
     fn visit_typed_function(&mut self, fun: &'ast TypedFunction) {
         visit_typed_function(self, fun);
+    }
+
+    fn visit_argument(&mut self, arg: &'ast Arg<Arc<Type>>) {
+        visit_argument(self, arg);
     }
 
     fn visit_typed_expr(&mut self, expr: &'ast TypedExpr) {
@@ -331,6 +335,7 @@ where
         Definition::ModuleConstant(_module_constant) => { /* TODO */ }
     }
 }
+
 pub fn visit_typed_function<'a, V>(v: &mut V, fun: &'a TypedFunction)
 where
     V: Visit<'a> + ?Sized,
@@ -338,6 +343,16 @@ where
     for stmt in &fun.body {
         v.visit_typed_statement(stmt);
     }
+
+    for arg in &fun.arguments {
+        v.visit_argument(arg);
+    }
+}
+
+pub fn visit_argument<'a, V>(_v: &mut V, _arg: &'a Arg<Arc<Type>>)
+where
+    V: Visit<'a> + ?Sized,
+{
 }
 
 pub fn visit_typed_expr<'a, V>(v: &mut V, node: &'a TypedExpr)
@@ -541,7 +556,7 @@ pub fn visit_typed_expr_fn<'a, V>(
     _location: &'a SrcSpan,
     _typ: &'a Arc<Type>,
     _is_capture: &'a bool,
-    _args: &'a [TypedArg],
+    args: &'a [TypedArg],
     body: &'a [TypedStatement],
     _return_annotation: &'a Option<TypeAst>,
 ) where
@@ -549,6 +564,10 @@ pub fn visit_typed_expr_fn<'a, V>(
 {
     for stmt in body {
         v.visit_typed_statement(stmt);
+    }
+
+    for arg in args {
+        v.visit_argument(arg);
     }
 }
 
