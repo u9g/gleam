@@ -3,6 +3,7 @@ mod compiler;
 mod engine;
 mod feedback;
 mod files;
+mod inlay_hint;
 mod messages;
 mod progress;
 mod router;

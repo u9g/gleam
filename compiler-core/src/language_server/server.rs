@@ -101,6 +101,7 @@ where
             Request::GoToDefinition(param) => self.goto_definition(param),
             Request::Completion(param) => self.completion(param),
             Request::CodeAction(param) => self.code_action(param),
+            Request::InlayHint(param) => self.inlay_hint(param),
         };
 
         self.publish_feedback(feedback);
@@ -319,6 +320,11 @@ where
         self.respond_with_engine(path, |engine| engine.action(params))
     }
 
+    fn inlay_hint(&mut self, params: lsp::InlayHintParams) -> (Json, Feedback) {
+        let path = super::path(&params.text_document.uri);
+        self.respond_with_engine(path, |engine| engine.inlay_hint(params))
+    }
+
     fn cache_file_in_memory(&mut self, path: Utf8PathBuf, text: String) -> Feedback {
         self.project_changed(&path);
         if let Err(error) = self.io.write_mem_cache(&path, &text) {
@@ -411,7 +417,7 @@ fn initialisation_handshake(connection: &lsp_server::Connection) -> InitializePa
         experimental: None,
         position_encoding: None,
         inline_value_provider: None,
-        inlay_hint_provider: None,
+        inlay_hint_provider: Some(lsp::OneOf::Left(true)),
         diagnostic_provider: None,
     };
     let server_capabilities_json =

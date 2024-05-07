@@ -1,7 +1,7 @@
 use camino::Utf8PathBuf;
 use lsp::{
     notification::{DidChangeWatchedFiles, DidOpenTextDocument},
-    request::GotoDefinition,
+    request::{GotoDefinition, InlayHintRequest},
 };
 use lsp_types::{
     self as lsp,
@@ -23,6 +23,7 @@ pub enum Request {
     GoToDefinition(lsp::GotoDefinitionParams),
     Completion(lsp::CompletionParams),
     CodeAction(lsp::CodeActionParams),
+    InlayHint(lsp::InlayHintParams),
 }
 
 impl Request {
@@ -48,6 +49,10 @@ impl Request {
             "textDocument/codeAction" => {
                 let params = cast_request::<CodeActionRequest>(request);
                 Some(Message::Request(id, Request::CodeAction(params)))
+            }
+            "textDocument/inlayHint" => {
+                let params = cast_request::<InlayHintRequest>(request);
+                Some(Message::Request(id, Request::InlayHint(params)))
             }
             _ => None,
         }

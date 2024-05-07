@@ -19,13 +19,14 @@ use crate::{
 };
 use camino::Utf8PathBuf;
 use ecow::EcoString;
-use lsp::CodeAction;
+use lsp::{CodeAction, InlayHint};
 use lsp_types::{self as lsp, Hover, HoverContents, MarkedString, Url};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 use super::{
-    code_action::CodeActionBuilder, src_span_to_lsp_range, DownloadDependencies, MakeLocker,
+    code_action::CodeActionBuilder, inlay_hint::InlayHintSearcher, src_span_to_lsp_range,
+    DownloadDependencies, MakeLocker,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -254,6 +255,18 @@ where
             } else {
                 Some(actions)
             })
+        })
+    }
+
+    pub fn inlay_hint(&mut self, params: lsp::InlayHintParams) -> Response<Option<Vec<InlayHint>>> {
+        self.respond(|this| {
+            let Some(module) = this.module_for_uri(&params.text_document.uri) else {
+                return Ok(None);
+            };
+
+            let hints = InlayHintSearcher::new(module, &params).inlay_hints();
+
+            Ok(Some(hints))
         })
     }
 
