@@ -553,17 +553,11 @@ fn same_requirements(
         (_, None) => return Ok(false),
     };
 
-    let left = if left.is_absolute() {
-        left.to_owned()
-    } else {
-        fs::canonicalise(&root_path.join(left))?
-    };
+    let left = fs::canonicalise(&root_path.join(left))?;
 
-    let right = if right.is_absolute() {
-        right.to_owned()
-    } else {
-        fs::canonicalise(&root_path.join(right))?
-    };
+    let right = fs::canonicalise(&root_path.join(right))?;
+
+    tracing::info!("left: {} right: {}", left, right);
 
     Ok(left == right)
 }
