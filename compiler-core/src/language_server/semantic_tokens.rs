@@ -1,14 +1,17 @@
+use std::sync::Arc;
+
 use crate::{
     ast::{
         self,
         visit::{self, Visit},
-        SrcSpan,
+        Pattern, SrcSpan, TypedClause,
     },
     build::{self, ProjectCompiler},
     io::{CommandExecutor, FileSystemReader, FileSystemWriter},
     line_numbers::LineNumbers,
     type_::{Type, TypeVar, ValueConstructorVariant},
 };
+use ecow::EcoString;
 use lsp_types::{SemanticToken, SemanticTokenType, SemanticTokensParams};
 
 use super::src_span_to_lsp_range;
@@ -46,6 +49,10 @@ semantic_tokens! {
     SEMANTIC_TOKEN_PROPERTY => PROPERTY,
     SEMANTIC_TOKEN_FUNCTION => FUNCTION,
     SEMANTIC_TOKEN_STRUCT => STRUCT,
+    SEMANTIC_TOKEN_ENUM_MEMBER => ENUM_MEMBER,
+    SEMANTIC_TOKEN_NUMBER => NUMBER,
+    SEMANTIC_TOKEN_STRING => STRING,
+    SEMANTIC_TOKEN_VARIABLE => VARIABLE,
 }
 
 pub struct SemanticTokenSearcher<'a, IO>
@@ -55,7 +62,7 @@ where
     line_numbers: LineNumbers,
     params: &'a SemanticTokensParams,
     module: &'a ast::TypedModule,
-    semantic_tokens: Vec<SemanticToken>,
+    semantic_tokens: Vec<(SrcSpan, u32)>,
     project_compiler: &'a ProjectCompiler<IO>,
 
     last_line: u32,
@@ -66,13 +73,32 @@ impl<'ast, IO> Visit<'ast> for SemanticTokenSearcher<'_, IO>
 where
     IO: CommandExecutor + FileSystemWriter + FileSystemReader + Clone,
 {
+    fn visit_typed_expr_case(
+        &mut self,
+        location: &'ast SrcSpan,
+        typ: &'ast Arc<Type>,
+        subjects: &'ast [ast::TypedExpr],
+        clauses: &'ast [TypedClause],
+    ) {
+        for clause in clauses {
+            for pattern in &clause.pattern {
+                self.visit_case_pattern(&pattern)
+            }
+            for alternate_clause_pattern_set in &clause.alternative_patterns {
+                for alternate_clause_pattern in alternate_clause_pattern_set {
+                    self.visit_case_pattern(&alternate_clause_pattern)
+                }
+            }
+        }
+        visit::visit_typed_expr_case(self, location, typ, subjects, clauses);
+    }
     fn visit_typed_expr_module_select(
         &mut self,
         location: &'ast SrcSpan,
-        typ: &'ast std::sync::Arc<Type>,
-        label: &'ast ecow::EcoString,
-        module_name: &'ast ecow::EcoString,
-        module_alias: &'ast ecow::EcoString,
+        typ: &'ast Arc<Type>,
+        label: &'ast EcoString,
+        module_name: &'ast EcoString,
+        module_alias: &'ast EcoString,
         constructor: &'ast crate::type_::ModuleValueConstructor,
     ) {
         let token_type = self.type_to_token_type(typ);
@@ -92,7 +118,7 @@ where
     fn visit_typed_expr_tuple_index(
         &mut self,
         location: &'ast SrcSpan,
-        typ: &'ast std::sync::Arc<Type>,
+        typ: &'ast Arc<Type>,
         index: &'ast u64,
         tuple: &'ast ast::TypedExpr,
     ) {
@@ -111,8 +137,8 @@ where
     fn visit_typed_expr_record_access(
         &mut self,
         location: &'ast SrcSpan,
-        typ: &'ast std::sync::Arc<Type>,
-        label: &'ast ecow::EcoString,
+        typ: &'ast Arc<Type>,
+        label: &'ast EcoString,
         index: &'ast u64,
         record: &'ast ast::TypedExpr,
     ) {
@@ -128,7 +154,7 @@ where
         visit::visit_typed_expr_record_access(self, location, typ, label, index, record)
     }
 
-    fn visit_import(&mut self, import: &'ast ast::Import<ecow::EcoString>) {
+    fn visit_import(&mut self, import: &'ast ast::Import<EcoString>) {
         for unqualified_type in &import.unqualified_types {
             self.push_range(unqualified_type.location, SEMANTIC_TOKEN_TYPE)
         }
@@ -188,6 +214,84 @@ where
 
             last_line: 0,
             last_char: 0,
+        }
+    }
+
+    pub fn visit_case_pattern(&mut self, pattern: &Pattern<Arc<Type>>) {
+        match pattern {
+            Pattern::Int { location, .. } => self.push_range(*location, SEMANTIC_TOKEN_NUMBER),
+            Pattern::Float { location, .. } => self.push_range(*location, SEMANTIC_TOKEN_NUMBER),
+            Pattern::String { location, .. } => self.push_range(*location, SEMANTIC_TOKEN_STRING),
+            Pattern::Variable { location, .. } => {
+                self.push_range(*location, SEMANTIC_TOKEN_VARIABLE)
+            }
+            Pattern::VarUsage { location, .. } => {
+                self.push_range(*location, SEMANTIC_TOKEN_VARIABLE)
+            }
+            Pattern::Assign {
+                name,
+                location,
+                pattern,
+            } => {
+                self.push_range(
+                    SrcSpan {
+                        start: location.end - name.len() as u32,
+                        end: location.end,
+                    },
+                    SEMANTIC_TOKEN_VARIABLE,
+                );
+                self.visit_case_pattern(pattern)
+            }
+            Pattern::Discard { location, .. } => {
+                self.push_range(*location, SEMANTIC_TOKEN_VARIABLE)
+            }
+            Pattern::List { elements, tail, .. } => {
+                for element in elements {
+                    self.visit_case_pattern(element)
+                }
+
+                if let Some(tail) = tail {
+                    self.visit_case_pattern(tail)
+                }
+            }
+            Pattern::Constructor {
+                location,
+                name,
+                arguments,
+                ..
+            } => {
+                self.push_range(
+                    SrcSpan {
+                        start: location.start,
+                        end: location.start + name.len() as u32,
+                    },
+                    SEMANTIC_TOKEN_ENUM_MEMBER,
+                );
+                for pattern in arguments {
+                    self.visit_case_pattern(&pattern.value)
+                }
+            }
+            Pattern::Tuple { elems, .. } => {
+                for element in elems {
+                    self.visit_case_pattern(element)
+                }
+            }
+            Pattern::BitArray { segments, .. } => {
+                for element in segments {
+                    self.visit_case_pattern(&element.value)
+                }
+            }
+            Pattern::StringPrefix {
+                location,
+                right_side_assignment,
+                ..
+            } => self.push_range(
+                SrcSpan {
+                    start: location.end - right_side_assignment.name().len() as u32,
+                    end: location.end,
+                },
+                SEMANTIC_TOKEN_VARIABLE,
+            ),
         }
     }
 
@@ -261,32 +365,42 @@ where
     }
 
     fn push_range(&mut self, location: SrcSpan, token_type: u32) {
-        let requested_range = src_span_to_lsp_range(location, &self.line_numbers);
+        self.semantic_tokens.push((location, token_type))
+    }
 
-        assert_eq!(requested_range.start.line, requested_range.end.line);
+    fn remake_ranges(mut self) -> Vec<SemanticToken> {
+        let mut tokens = self.semantic_tokens;
+        tokens.sort_by_key(|x| x.0.start);
+        let mut semantic_tokens = vec![];
+        for token in tokens {
+            let requested_range = src_span_to_lsp_range(token.0, &self.line_numbers);
 
-        let delta_line = requested_range.start.line - self.last_line;
-        self.last_line = requested_range.start.line;
+            assert_eq!(requested_range.start.line, requested_range.end.line);
 
-        let delta_start = if delta_line == 0 {
-            requested_range.start.character - self.last_char
-        } else {
-            requested_range.start.character
-        };
-        self.last_char = requested_range.start.character;
+            let delta_line = requested_range.start.line - self.last_line;
+            self.last_line = requested_range.start.line;
 
-        self.semantic_tokens.push(SemanticToken {
-            delta_line,
-            delta_start,
-            length: requested_range.end.character - requested_range.start.character,
-            token_type,
-            token_modifiers_bitset: 0,
-        })
+            let delta_start = if delta_line == 0 {
+                requested_range.start.character - self.last_char
+            } else {
+                requested_range.start.character
+            };
+            self.last_char = requested_range.start.character;
+
+            semantic_tokens.push(SemanticToken {
+                delta_line,
+                delta_start,
+                length: requested_range.end.character - requested_range.start.character,
+                token_type: token.1,
+                token_modifiers_bitset: 0,
+            })
+        }
+        semantic_tokens
     }
 
     pub fn semantic_tokens(mut self) -> Vec<SemanticToken> {
         self.visit_typed_module(self.module);
 
-        self.semantic_tokens
+        self.remake_ranges()
     }
 }
