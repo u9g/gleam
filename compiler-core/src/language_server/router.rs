@@ -11,6 +11,7 @@ use crate::{
 use std::collections::{hash_map::Entry, HashMap};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use itertools::Itertools;
 
 use super::feedback::FeedbackBookKeeper;
 

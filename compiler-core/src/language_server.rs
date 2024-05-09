@@ -7,6 +7,7 @@ mod inlay_hint;
 mod messages;
 mod progress;
 mod router;
+mod semantic_tokens;
 mod server;
 
 #[cfg(test)]

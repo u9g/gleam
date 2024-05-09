@@ -19,14 +19,16 @@ use crate::{
 };
 use camino::Utf8PathBuf;
 use ecow::EcoString;
-use lsp::{CodeAction, InlayHint};
+use itertools::Itertools;
+use lsp::{CodeAction, InlayHint, SemanticTokens, SemanticTokensResult};
 use lsp_types::{self as lsp, Hover, HoverContents, MarkedString, Url};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 use super::{
-    code_action::CodeActionBuilder, inlay_hint::InlayHintSearcher, src_span_to_lsp_range,
-    DownloadDependencies, MakeLocker,
+    code_action::CodeActionBuilder, inlay_hint::InlayHintSearcher,
+    semantic_tokens::SemanticTokenSearcher, src_span_to_lsp_range, DownloadDependencies,
+    MakeLocker,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -158,6 +160,8 @@ where
                 None => return Ok(None),
             };
 
+            tracing::info!("goto definition...");
+
             let location = match node
                 .definition_location(this.compiler.project_compiler.get_importable_modules())
             {
@@ -267,6 +271,26 @@ where
             let hints = InlayHintSearcher::new(module, &params).inlay_hints();
 
             Ok(Some(hints))
+        })
+    }
+
+    pub fn semantic_tokens_full(
+        &mut self,
+        params: lsp::SemanticTokensParams,
+    ) -> Response<Option<SemanticTokensResult>> {
+        self.respond(|this| {
+            let Some(module) = this.module_for_uri(&params.text_document.uri) else {
+                return Ok(None);
+            };
+
+            let semantic_tokens =
+                SemanticTokenSearcher::new(module, &params, &this.compiler.project_compiler)
+                    .semantic_tokens();
+
+            Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+                result_id: None,
+                data: semantic_tokens,
+            })))
         })
     }
 
@@ -380,8 +404,6 @@ where
     }
 
     fn module_for_uri(&self, uri: &Url) -> Option<&Module> {
-        use itertools::Itertools;
-
         // The to_file_path method is available on these platforms
         #[cfg(any(unix, windows, target_os = "redox", target_os = "wasi"))]
         let path = uri.to_file_path().expect("URL file");

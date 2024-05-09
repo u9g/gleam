@@ -1,7 +1,7 @@
 use camino::Utf8PathBuf;
 use lsp::{
     notification::{DidChangeWatchedFiles, DidOpenTextDocument},
-    request::{GotoDefinition, InlayHintRequest},
+    request::{GotoDefinition, InlayHintRequest, SemanticTokensFullRequest},
 };
 use lsp_types::{
     self as lsp,
@@ -24,6 +24,7 @@ pub enum Request {
     Completion(lsp::CompletionParams),
     CodeAction(lsp::CodeActionParams),
     InlayHint(lsp::InlayHintParams),
+    SemanticTokensFull(lsp::SemanticTokensParams),
 }
 
 impl Request {
@@ -53,6 +54,10 @@ impl Request {
             "textDocument/inlayHint" => {
                 let params = cast_request::<InlayHintRequest>(request);
                 Some(Message::Request(id, Request::InlayHint(params)))
+            }
+            "textDocument/semanticTokens/full" => {
+                let params = cast_request::<SemanticTokensFullRequest>(request);
+                Some(Message::Request(id, Request::SemanticTokensFull(params)))
             }
             _ => None,
         }
@@ -108,6 +113,7 @@ impl Notification {
 
             "workspace/didChangeWatchedFiles" => {
                 let params = cast_notification::<DidChangeWatchedFiles>(notification);
+                tracing::info!("didChangeWatchedFiles {:?}", params);
                 let notification = Notification::ConfigFileChanged {
                     path: super::path(&params.changes.into_iter().last()?.uri),
                 };

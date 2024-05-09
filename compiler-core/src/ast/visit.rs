@@ -46,9 +46,9 @@ use ecow::EcoString;
 use crate::type_::Type;
 
 use super::{
-    Arg, BinOp, BitArrayOption, Definition, SrcSpan, Statement, TypeAst, TypedArg, TypedAssignment,
-    TypedClause, TypedDefinition, TypedExpr, TypedExprBitArraySegment, TypedFunction, TypedModule,
-    TypedRecordUpdateArg, TypedStatement, Use,
+    Arg, BinOp, BitArrayOption, Definition, Import, SrcSpan, Statement, TypeAst, TypedArg,
+    TypedAssignment, TypedClause, TypedDefinition, TypedExpr, TypedExprBitArraySegment,
+    TypedFunction, TypedModule, TypedRecordUpdateArg, TypedStatement, Use,
 };
 
 pub trait Visit<'ast> {
@@ -62,6 +62,10 @@ pub trait Visit<'ast> {
 
     fn visit_typed_function(&mut self, fun: &'ast TypedFunction) {
         visit_typed_function(self, fun);
+    }
+
+    fn visit_import(&mut self, import: &'ast Import<EcoString>) {
+        visit_import(self, import);
     }
 
     fn visit_argument(&mut self, arg: &'ast Arg<Arc<Type>>) {
@@ -331,7 +335,7 @@ where
         Definition::Function(fun) => v.visit_typed_function(fun),
         Definition::TypeAlias(_type_alias) => { /* TODO */ }
         Definition::CustomType(_custom_type) => { /* TODO */ }
-        Definition::Import(_import) => { /* TODO */ }
+        Definition::Import(import) => v.visit_import(import),
         Definition::ModuleConstant(_module_constant) => { /* TODO */ }
     }
 }
@@ -347,6 +351,12 @@ where
     for arg in &fun.arguments {
         v.visit_argument(arg);
     }
+}
+
+pub fn visit_import<'a, V>(_v: &mut V, _import: &'a Import<EcoString>)
+where
+    V: Visit<'a> + ?Sized,
+{
 }
 
 pub fn visit_argument<'a, V>(_v: &mut V, _arg: &'a Arg<Arc<Type>>)
