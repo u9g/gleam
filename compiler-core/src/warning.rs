@@ -190,19 +190,14 @@ only lowercase alphanumeric characters or underscores."
                     typ,
                 } => {
                     let mut text = String::new();
-                    text.push_str(
-                        "\
-This code will crash if it is run. Be sure to finish it before
-running your program.",
-                    );
                     let title = match kind {
                         TodoKind::Keyword => "Todo found",
                         TodoKind::EmptyFunction => "Unimplemented function",
                         TodoKind::IncompleteUse => {
                             text.push_str(
                                 "
-A use expression must always be followed by at least one more
-expression.",
+                                A use expression must always be followed by at least one more
+                                expression.",
                             );
                             "Incomplete use expression"
                         }
