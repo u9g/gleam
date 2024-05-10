@@ -9,7 +9,7 @@ use crate::{
     build::{self, ProjectCompiler},
     io::{CommandExecutor, FileSystemReader, FileSystemWriter},
     line_numbers::LineNumbers,
-    type_::{Type, TypeVar, ValueConstructorVariant},
+    type_::{ModuleValueConstructor, Type, TypeVar, ValueConstructorVariant},
 };
 use ecow::EcoString;
 use lsp_types::{SemanticToken, SemanticTokenType, SemanticTokensParams};
@@ -73,25 +73,11 @@ impl<'ast, IO> Visit<'ast> for SemanticTokenSearcher<'_, IO>
 where
     IO: CommandExecutor + FileSystemWriter + FileSystemReader + Clone,
 {
-    fn visit_typed_expr_case(
-        &mut self,
-        location: &'ast SrcSpan,
-        typ: &'ast Arc<Type>,
-        subjects: &'ast [ast::TypedExpr],
-        clauses: &'ast [TypedClause],
-    ) {
-        for clause in clauses {
-            for pattern in &clause.pattern {
-                self.visit_case_pattern(&pattern)
-            }
-            for alternate_clause_pattern_set in &clause.alternative_patterns {
-                for alternate_clause_pattern in alternate_clause_pattern_set {
-                    self.visit_case_pattern(&alternate_clause_pattern)
-                }
-            }
-        }
-        visit::visit_typed_expr_case(self, location, typ, subjects, clauses);
+    fn visit_typed_pattern(&mut self, pattern: &'ast Pattern<Arc<Type>>) {
+        self.visit_pattern(&pattern);
+        visit::visit_typed_pattern(self, pattern)
     }
+
     fn visit_typed_expr_module_select(
         &mut self,
         location: &'ast SrcSpan,
@@ -99,10 +85,19 @@ where
         label: &'ast EcoString,
         module_name: &'ast EcoString,
         module_alias: &'ast EcoString,
-        constructor: &'ast crate::type_::ModuleValueConstructor,
+        constructor: &'ast ModuleValueConstructor,
     ) {
-        let token_type = self.type_to_token_type(typ);
-        self.push_range(*location, token_type);
+        let token_type = self.type_to_token_type(
+            typ,
+            matches!(constructor, ModuleValueConstructor::Record { .. }),
+        );
+        self.push_range(
+            SrcSpan {
+                start: location.end - label.len() as u32,
+                end: location.end,
+            },
+            token_type,
+        );
 
         visit::visit_typed_expr_module_select(
             self,
@@ -122,7 +117,7 @@ where
         index: &'ast u64,
         tuple: &'ast ast::TypedExpr,
     ) {
-        let token_type = self.type_to_token_type(typ);
+        let token_type = self.type_to_token_type(typ, false);
         self.push_range(
             SrcSpan {
                 start: location.end - index.to_string().len() as u32,
@@ -142,7 +137,7 @@ where
         index: &'ast u64,
         record: &'ast ast::TypedExpr,
     ) {
-        let token_type = self.type_to_token_type(typ);
+        let token_type = self.type_to_token_type(typ, false);
         self.push_range(
             SrcSpan {
                 start: location.end - label.len() as u32,
@@ -217,13 +212,15 @@ where
         }
     }
 
-    pub fn visit_case_pattern(&mut self, pattern: &Pattern<Arc<Type>>) {
+    pub fn visit_pattern(&mut self, pattern: &Pattern<Arc<Type>>) {
         match pattern {
             Pattern::Int { location, .. } => self.push_range(*location, SEMANTIC_TOKEN_NUMBER),
             Pattern::Float { location, .. } => self.push_range(*location, SEMANTIC_TOKEN_NUMBER),
             Pattern::String { location, .. } => self.push_range(*location, SEMANTIC_TOKEN_STRING),
-            Pattern::Variable { location, .. } => {
-                self.push_range(*location, SEMANTIC_TOKEN_VARIABLE)
+            Pattern::Variable { location, name, .. } => {
+                if !name.starts_with("_") {
+                    self.push_range(*location, SEMANTIC_TOKEN_VARIABLE)
+                }
             }
             Pattern::VarUsage { location, .. } => {
                 self.push_range(*location, SEMANTIC_TOKEN_VARIABLE)
@@ -240,45 +237,62 @@ where
                     },
                     SEMANTIC_TOKEN_VARIABLE,
                 );
-                self.visit_case_pattern(pattern)
+                self.visit_pattern(pattern)
             }
             Pattern::Discard { location, .. } => {
                 self.push_range(*location, SEMANTIC_TOKEN_VARIABLE)
             }
             Pattern::List { elements, tail, .. } => {
                 for element in elements {
-                    self.visit_case_pattern(element)
+                    self.visit_pattern(element)
                 }
 
                 if let Some(tail) = tail {
-                    self.visit_case_pattern(tail)
+                    self.visit_pattern(tail)
                 }
             }
             Pattern::Constructor {
                 location,
                 name,
                 arguments,
+                module,
                 ..
             } => {
+                if let Some(module_name) = module {
+                    self.push_range(
+                        SrcSpan {
+                            start: location.start,
+                            end: location.start + module_name.len() as u32,
+                        },
+                        SEMANTIC_TOKEN_TYPE,
+                    )
+                }
                 self.push_range(
-                    SrcSpan {
-                        start: location.start,
-                        end: location.start + name.len() as u32,
+                    {
+                        let true_start = location.start
+                            + module
+                                .as_ref()
+                                .map(|x| x.len() + 1 /* for period */)
+                                .unwrap_or(0) as u32;
+                        SrcSpan {
+                            start: true_start,
+                            end: true_start + name.len() as u32,
+                        }
                     },
                     SEMANTIC_TOKEN_ENUM_MEMBER,
                 );
                 for pattern in arguments {
-                    self.visit_case_pattern(&pattern.value)
+                    self.visit_pattern(&pattern.value)
                 }
             }
             Pattern::Tuple { elems, .. } => {
                 for element in elems {
-                    self.visit_case_pattern(element)
+                    self.visit_pattern(element)
                 }
             }
             Pattern::BitArray { segments, .. } => {
                 for element in segments {
-                    self.visit_case_pattern(&element.value)
+                    self.visit_pattern(&element.value)
                 }
             }
             Pattern::StringPrefix {
@@ -295,7 +309,7 @@ where
         }
     }
 
-    fn type_to_token_type(&mut self, type_: &Type) -> u32 {
+    fn type_to_token_type(&mut self, type_: &Type, is_record: bool) -> u32 {
         let mut token_type = SEMANTIC_TOKEN_FUNCTION;
         let mut type__ = type_.to_owned();
         loop {
@@ -330,20 +344,24 @@ where
                                     break;
                                 }
                                 ValueConstructorVariant::Record { .. } => {
-                                    token_type = SEMANTIC_TOKEN_PROPERTY;
+                                    token_type = SEMANTIC_TOKEN_ENUM_MEMBER;
                                     break;
                                 }
                             }
                         }
 
                         if module.types.get(name).is_some() {
-                            token_type = SEMANTIC_TOKEN_PROPERTY;
+                            token_type = SEMANTIC_TOKEN_TYPE;
                             break;
                         }
                     }
                 }
-                Type::Fn { .. } => {
-                    token_type = SEMANTIC_TOKEN_FUNCTION;
+                Type::Fn { retrn, .. } => {
+                    token_type = if is_record {
+                        SEMANTIC_TOKEN_ENUM_MEMBER
+                    } else {
+                        SEMANTIC_TOKEN_FUNCTION
+                    };
                     break;
                 }
                 Type::Var { type_ } => {
