@@ -735,34 +735,53 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     args: args.len(),
                 });
         }
-
         match &fun {
             TypedExpr::Call { fun, .. } => {
-                if let TypedExpr::ModuleSelect {
-                    label, module_name, ..
-                } = fun.as_ref()
-                {
-                    if module_name == "ct/reflection"
-                        && match label.as_str() {
-                            "call_method" | "get_static_method" | "new_instance" => true,
-                            _ => false,
-                        }
+                let should_search_args = match fun.as_ref() {
+                    TypedExpr::ModuleSelect {
+                        label, module_name, ..
+                    } if matches!(module_name.as_ref(), "ct/reflection")
+                        && matches!(
+                            label.as_ref(),
+                            "call_method" | "get_static_method" | "new_instance"
+                        ) =>
                     {
-                        for arg in &args {
-                            if let TypedExpr::Tuple { typ, elems, .. } = &arg.value {
-                                let Type::Tuple {
-                                    elems: tuple_type_elems,
-                                } = typ.as_ref()
-                                else {
-                                    unreachable!()
-                                };
+                        true
+                    }
+                    TypedExpr::Var {
+                        constructor:
+                            ValueConstructor {
+                                variant: ValueConstructorVariant::ModuleFn { name, .. },
+                                ..
+                            },
+                        ..
+                    } if matches!(
+                        name.as_ref(),
+                        "reflection__get_static_method"
+                            | "reflection__call_method"
+                            | "reflection__new_instance"
+                    ) =>
+                    {
+                        true
+                    }
+                    _ => false,
+                };
 
-                                for (i, elem) in tuple_type_elems.iter().enumerate() {
-                                    if elem.is_list() {
-                                        return Err(Error::ListUsedInReflection {
-                                            location: elems[i].location(),
-                                        });
-                                    }
+                if should_search_args {
+                    for arg in &args {
+                        if let TypedExpr::Tuple { typ, elems, .. } = &arg.value {
+                            let Type::Tuple {
+                                elems: tuple_type_elems,
+                            } = typ.as_ref()
+                            else {
+                                unreachable!()
+                            };
+
+                            for (i, elem) in tuple_type_elems.iter().enumerate() {
+                                if elem.is_list() {
+                                    return Err(Error::ListUsedInReflection {
+                                        location: elems[i].location(),
+                                    });
                                 }
                             }
                         }
@@ -770,7 +789,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 }
             }
             _ => {}
-        }
+        };
 
         Ok(TypedExpr::Call {
             location,
