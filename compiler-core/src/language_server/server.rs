@@ -320,7 +320,16 @@ where
 
     fn code_action(&mut self, params: lsp::CodeActionParams) -> (Json, Feedback) {
         let path = super::path(&params.text_document.uri);
-        self.respond_with_engine(path, |engine| engine.action(params))
+
+        self.respond_with_engine(path.clone(), |engine| {
+            engine.action(
+                params,
+                engine
+                    .last_compile_error
+                    .clone()
+                    .map(|x| (x, std::fs::read_to_string(path).unwrap())),
+            )
+        })
     }
 
     fn inlay_hint(&mut self, params: lsp::InlayHintParams) -> (Json, Feedback) {

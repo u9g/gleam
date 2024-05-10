@@ -70,6 +70,8 @@ pub struct LanguageServerEngine<IO, Reporter> {
     /// Used to know if to show the "View on HexDocs" link
     /// when hovering on an imported value
     hex_deps: std::collections::HashSet<EcoString>,
+
+    pub last_compile_error: Option<Error>,
 }
 
 impl<'a, IO, Reporter> LanguageServerEngine<IO, Reporter>
@@ -124,6 +126,7 @@ where
             compiler,
             paths,
             hex_deps,
+            last_compile_error: None,
         })
     }
 
@@ -138,6 +141,11 @@ where
         self.progress_reporter.compilation_started();
         let result = self.compiler.compile();
         self.progress_reporter.compilation_finished();
+
+        self.last_compile_error = match &result {
+            Err(e) => Some(e.to_owned()),
+            _ => None,
+        };
 
         let modules = result?;
         self.modules_compiled_since_last_feedback.extend(modules);
@@ -249,9 +257,60 @@ where
         })
     }
 
-    pub fn action(&mut self, params: lsp::CodeActionParams) -> Response<Option<Vec<CodeAction>>> {
+    pub fn action(
+        &mut self,
+        params: lsp::CodeActionParams,
+        compiler_result: Option<(Error, String)>,
+    ) -> Response<Option<Vec<CodeAction>>> {
         self.respond(|this| {
             let mut actions = vec![];
+
+            if let Some(err) = compiler_result {
+                let (err, code) = err;
+
+                if let Error::Type { errors, .. } = err {
+                    for error in errors {
+                        if let crate::type_::Error::IncorrectArity {
+                            location, labels, ..
+                        } = error
+                        {
+                            let action = TextEdit {
+                                range: src_span_to_lsp_range(
+                                    SrcSpan {
+                                        start: code
+                                            .char_indices()
+                                            .skip(location.start as usize)
+                                            .find(|x| x.1 == '(')
+                                            .unwrap()
+                                            .0
+                                            as u32
+                                            + 1,
+                                        end: code[..location.end as usize]
+                                            .char_indices()
+                                            .rev()
+                                            .find(|x| x.1 == ')')
+                                            .unwrap()
+                                            .0 as u32,
+                                    },
+                                    &LineNumbers::new(&code),
+                                ),
+                                new_text: labels
+                                    .iter()
+                                    .map(|label| format!("{label}: todo"))
+                                    .join(", "),
+                            };
+
+                            CodeActionBuilder::new("Prefill arguments")
+                                .kind(lsp_types::CodeActionKind::QUICKFIX)
+                                .changes(params.text_document.uri.clone(), vec![action])
+                                .preferred(true)
+                                .push_to(&mut actions);
+                        }
+                    }
+                }
+                return Ok(Some(actions));
+            }
+
             let Some(module) = this.module_for_uri(&params.text_document.uri) else {
                 return Ok(None);
             };
