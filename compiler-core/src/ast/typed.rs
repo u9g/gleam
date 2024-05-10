@@ -171,8 +171,18 @@ impl TypedExpr {
             | Self::Todo { .. }
             | Self::Panic { .. }
             | Self::Float { .. }
-            | Self::String { .. }
-            | Self::ModuleSelect { .. } => self.self_if_contains_location(byte_index),
+            | Self::String { .. } => self.self_if_contains_location(byte_index),
+
+            Self::ModuleSelect { module_alias, .. } => {
+                let mut location = self.location();
+                location.start -= module_alias.len() as u32;
+
+                if location.contains(byte_index) {
+                    Some(self.into())
+                } else {
+                    None
+                }
+            }
 
             Self::Pipeline {
                 assignments,
