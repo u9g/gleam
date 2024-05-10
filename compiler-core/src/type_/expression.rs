@@ -736,6 +736,42 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 });
         }
 
+        match &fun {
+            TypedExpr::Call { fun, .. } => {
+                if let TypedExpr::ModuleSelect {
+                    label, module_name, ..
+                } = fun.as_ref()
+                {
+                    if module_name == "ct/reflection"
+                        && match label.as_str() {
+                            "call_method" | "get_static_method" | "new_instance" => true,
+                            _ => false,
+                        }
+                    {
+                        for arg in &args {
+                            if let TypedExpr::Tuple { typ, elems, .. } = &arg.value {
+                                let Type::Tuple {
+                                    elems: tuple_type_elems,
+                                } = typ.as_ref()
+                                else {
+                                    unreachable!()
+                                };
+
+                                for (i, elem) in tuple_type_elems.iter().enumerate() {
+                                    if elem.is_list() {
+                                        return Err(Error::ListUsedInReflection {
+                                            location: elems[i].location(),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+
         Ok(TypedExpr::Call {
             location,
             typ,

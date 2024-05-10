@@ -422,6 +422,10 @@ pub enum Error {
         location: SrcSpan,
         actual_type: Option<Type>,
     },
+
+    ListUsedInReflection {
+        location: SrcSpan,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -709,6 +713,7 @@ impl Error {
             }
             Error::ReservedModuleName { .. } => 0,
             Error::KeywordInModuleName { .. } => 0,
+            Error::ListUsedInReflection { location } => location.start,
         }
     }
 

@@ -215,6 +215,14 @@ impl Type {
         }
     }
 
+    pub fn is_list(&self) -> bool {
+        match self {
+            Self::Named { module, name, .. } if "List" == name && is_prelude_module(module) => true,
+            Self::Var { type_ } => type_.borrow().is_string(),
+            _ => false,
+        }
+    }
+
     pub fn named_type_name(&self) -> Option<(EcoString, EcoString)> {
         match self {
             Self::Named { module, name, .. } => Some((module.clone(), name.clone())),

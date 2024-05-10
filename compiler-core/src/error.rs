@@ -1153,6 +1153,25 @@ Second: {second}"
                 .iter()
                 .map(|error| {
                     match error {
+                        TypeError::ListUsedInReflection { location } => {
+                            let text = 
+                                "You used a gleam list where you should have used a javascript list. Convert using `std.to_js_array`.".to_string();
+                            Diagnostic{
+                                title: "Gleam List used in Reflection".into(),
+                                text,
+                                hint: None,
+                                level: Level::Error,
+                                location: Some(Location {
+                                    label: Label {
+                                        text: Some("Argument of list here".into()),
+                                        span: *location,
+                                    },
+                                    path: path.clone(),
+                                    src: src.clone(),
+                                    extra_labels: vec![],
+                                })
+                            }
+                        }
                 TypeError::SrcImportingTest {
                     location,
                     src_module,
