@@ -73,6 +73,20 @@ impl<'ast, IO> Visit<'ast> for SemanticTokenSearcher<'_, IO>
 where
     IO: CommandExecutor + FileSystemWriter + FileSystemReader + Clone,
 {
+    fn visit_typed_expr_var(
+        &mut self,
+        location: &'ast SrcSpan,
+        constructor: &'ast crate::type_::ValueConstructor,
+        name: &'ast EcoString,
+    ) {
+        let token_type = self.type_to_token_type(
+            &constructor.type_,
+            matches!(constructor.variant, ValueConstructorVariant::Record { .. }),
+        );
+        self.push_range(*location, token_type);
+        visit::visit_typed_expr_var(self, location, constructor, name);
+    }
+
     fn visit_typed_pattern(&mut self, pattern: &'ast Pattern<Arc<Type>>) {
         self.visit_pattern(&pattern);
         visit::visit_typed_pattern(self, pattern)
