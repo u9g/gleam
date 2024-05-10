@@ -20,15 +20,19 @@ use crate::{
 use camino::Utf8PathBuf;
 use ecow::EcoString;
 use itertools::Itertools;
-use lsp::{CodeAction, InlayHint, SemanticTokens, SemanticTokensResult};
+use lsp::{
+    CodeAction, InlayHint, SemanticTokens, SemanticTokensResult, TextDocumentPositionParams,
+    TextEdit,
+};
 use lsp_types::{self as lsp, Hover, HoverContents, MarkedString, Url};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 use super::{
-    code_action::CodeActionBuilder, inlay_hint::InlayHintSearcher,
-    semantic_tokens::SemanticTokenSearcher, src_span_to_lsp_range, DownloadDependencies,
-    MakeLocker,
+    code_action::{CodeActionBuilder, ReplaceModuleSelectWithUseSearcher},
+    inlay_hint::InlayHintSearcher,
+    semantic_tokens::SemanticTokenSearcher,
+    src_span_to_lsp_range, DownloadDependencies, MakeLocker,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -253,6 +257,7 @@ where
             };
 
             code_action_unused_imports(module, &params, &mut actions);
+            this.code_action_add_import(module, &params, &mut actions);
 
             Ok(if actions.is_empty() {
                 None
@@ -260,6 +265,79 @@ where
                 Some(actions)
             })
         })
+    }
+
+    fn code_action_add_import(
+        &self,
+        module: &Module,
+        params: &lsp::CodeActionParams,
+        actions: &mut Vec<CodeAction>,
+    ) {
+        let uri = &params.text_document.uri;
+        let Some((line_numbers, located)) = self.module_node_at_position(
+            &TextDocumentPositionParams {
+                text_document: params.text_document.clone(),
+                position: params.range.start,
+            },
+            module,
+        ) else {
+            return;
+        };
+
+        match located {
+            Located::Expression(TypedExpr::ModuleSelect {
+                label,
+                module_name,
+                module_alias,
+                ..
+            }) => {
+                let mut changes =
+                    ReplaceModuleSelectWithUseSearcher::new(module, module_alias, label)
+                        .text_edits();
+
+                let import = module.ast.definitions.iter().find(|x| {
+                    if let Definition::Import(import) = x {
+                        // todo: handle aliased imports
+                        return import.module.as_ref() == module_name.as_ref();
+                    };
+                    false
+                });
+
+                // todo: handle type imports
+                if let Some(Definition::Import(import)) = import {
+                    if import.unqualified_types.is_empty() && import.unqualified_values.is_empty() {
+                        changes.push(TextEdit {
+                            range: src_span_to_lsp_range(
+                                SrcSpan {
+                                    start: import.location.end,
+                                    end: import.location.end,
+                                },
+                                &line_numbers,
+                            ),
+                            new_text: format!(".{{{}}}", label.to_owned()).to_owned(),
+                        })
+                    } else {
+                        changes.push(TextEdit {
+                            range: src_span_to_lsp_range(
+                                SrcSpan {
+                                    start: import.location.end - 1,
+                                    end: import.location.end - 1,
+                                },
+                                &line_numbers,
+                            ),
+                            new_text: format!(", {}", label.to_owned()).to_owned(),
+                        })
+                    }
+                }
+
+                CodeActionBuilder::new("Replace qualified type with import")
+                    .kind(lsp_types::CodeActionKind::QUICKFIX)
+                    .changes(uri.clone(), changes)
+                    .preferred(true)
+                    .push_to(actions);
+            }
+            _ => {}
+        }
     }
 
     pub fn inlay_hint(&mut self, params: lsp::InlayHintParams) -> Response<Option<Vec<InlayHint>>> {

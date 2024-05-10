@@ -1,4 +1,17 @@
-use lsp_types::{CodeAction, Url};
+use ecow::EcoString;
+use lsp_types::{CodeAction, TextEdit, Url};
+
+use crate::{
+    ast::{
+        self,
+        visit::{self, Visit},
+        SrcSpan,
+    },
+    build,
+    line_numbers::LineNumbers,
+};
+
+use super::src_span_to_lsp_range;
 
 #[derive(Debug)]
 pub struct CodeActionBuilder {
@@ -43,5 +56,70 @@ impl CodeActionBuilder {
 
     pub fn push_to(self, actions: &mut Vec<CodeAction>) {
         actions.push(self.action);
+    }
+}
+
+pub struct ReplaceModuleSelectWithUseSearcher<'a> {
+    line_numbers: LineNumbers,
+    module_alias: &'a EcoString,
+    label: &'a EcoString,
+    module: &'a ast::TypedModule,
+    text_edits: Vec<TextEdit>,
+}
+
+impl<'ast> Visit<'ast> for ReplaceModuleSelectWithUseSearcher<'_> {
+    fn visit_typed_expr_module_select(
+        &mut self,
+        location: &'ast SrcSpan,
+        typ: &'ast std::sync::Arc<crate::type_::Type>,
+        label: &'ast EcoString,
+        module_name: &'ast EcoString,
+        module_alias: &'ast EcoString,
+        constructor: &'ast crate::type_::ModuleValueConstructor,
+    ) {
+        if module_alias == self.module_alias && label == self.label {
+            let range = src_span_to_lsp_range(
+                SrcSpan {
+                    start: location.start - module_alias.len() as u32,
+                    end: location.start + 1,
+                },
+                &self.line_numbers,
+            );
+            self.text_edits.push(TextEdit {
+                range,
+                new_text: "".into(),
+            });
+        }
+        visit::visit_typed_expr_module_select(
+            self,
+            location,
+            typ,
+            label,
+            module_name,
+            module_alias,
+            constructor,
+        )
+    }
+}
+
+impl<'ast> ReplaceModuleSelectWithUseSearcher<'ast> {
+    pub fn new(
+        module: &'ast build::Module,
+        module_alias: &'ast EcoString,
+        label: &'ast EcoString,
+    ) -> Self {
+        Self {
+            line_numbers: LineNumbers::new(&module.code),
+            module_alias,
+            label,
+            module: &module.ast,
+            text_edits: vec![],
+        }
+    }
+
+    pub fn text_edits(mut self) -> Vec<TextEdit> {
+        self.visit_typed_module(self.module);
+
+        self.text_edits
     }
 }
