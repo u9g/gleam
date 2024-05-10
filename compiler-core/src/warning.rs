@@ -169,6 +169,21 @@ only lowercase alphanumeric characters or underscores."
                 )),
             },
             Self::Type { path, warning, src } => match warning {
+                type_::Warning::UnnecessaryQualification { location } => Diagnostic {
+                    title: "Unnecessary qualification".into(),
+                    text: "You don't need to add this qualification.".into(),
+                    level: diagnostic::Level::Warning,
+                    location: Some(Location {
+                        path: path.to_path_buf(),
+                        src: src.clone(),
+                        label: diagnostic::Label {
+                            text: Some("This qualification is unnecessary".into()),
+                            span: *location,
+                        },
+                        extra_labels: Vec::new(),
+                    }),
+                    hint: None,
+                },
                 type_::Warning::Todo {
                     kind,
                     location,

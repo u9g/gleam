@@ -925,11 +925,39 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     // If the name is in the environment, use the original error from
                     // inferring the record access, so that we can suggest possible
                     // misspellings of field names
-                    if self.environment.scope.contains_key(&name) {
+                    let module_access = if self.environment.scope.contains_key(&name) {
                         module_access.map_err(|_| err)
                     } else {
                         module_access
-                    }
+                    };
+
+                    match &module_access {
+                        Ok(TypedExpr::ModuleSelect {
+                            location,
+                            label,
+                            module_alias,
+                            ..
+                        }) => {
+                            if self
+                                .environment
+                                .unqualified_imported_names
+                                .contains_key(label)
+                            {
+                                self.environment
+                                    .warnings
+                                    .emit(Warning::UnnecessaryQualification {
+                                        location: SrcSpan {
+                                            start: location.start - module_alias.len() as u32,
+                                            end: location.start,
+                                        },
+                                    });
+                            }
+                        }
+
+                        _ => {}
+                    };
+
+                    module_access
                 }
                 _ => Err(err),
             },

@@ -638,6 +638,12 @@ pub enum Warning {
         args_location: Option<SrcSpan>,
         args: usize,
     },
+
+    /// Unnecessary qualification because this type or value
+    /// is imported via qualified import.
+    UnnecessaryQualification {
+        location: SrcSpan,
+    },
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
