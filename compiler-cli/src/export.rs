@@ -1,9 +1,14 @@
 use camino::Utf8PathBuf;
+use ecow::EcoString;
 use gleam_core::{
     analyse::TargetSupport,
     build::{Codegen, Mode, Options, Target},
+    language_server::{FileSystemProxy, NullProgressReporter, Router},
     Result,
 };
+use itertools::Itertools;
+
+use crate::fs::ProjectIO;
 
 #[cfg(target_os = "windows")]
 static ENTRYPOINT_FILENAME: &str = "entrypoint.ps1";
@@ -124,6 +129,31 @@ pub fn javascript_prelude() -> Result<()> {
 
 pub fn typescript_prelude() -> Result<()> {
     print!("{}", gleam_core::javascript::PRELUDE_TS_DEF);
+    Ok(())
+}
+
+pub fn typed_ast(path: Utf8PathBuf) -> Result<()> {
+    let mut router = Router::new(NullProgressReporter, FileSystemProxy::new(ProjectIO::new()));
+    let project = router.project_for_path(path.clone()).unwrap().unwrap();
+
+    let components = path
+        .strip_prefix(project.engine.paths.root())
+        .unwrap()
+        .components()
+        .skip(1)
+        .map(|c| c.as_os_str().to_string_lossy());
+    let module_name: EcoString = Itertools::intersperse(components, "/".into())
+        .collect::<String>()
+        .strip_suffix(".gleam")
+        .unwrap()
+        .into();
+
+    project.engine.compile_please().result.unwrap();
+
+    let module = project.engine.compiler.modules.get(&module_name).unwrap();
+
+    println!("{:#?}", module.ast.definitions);
+
     Ok(())
 }
 

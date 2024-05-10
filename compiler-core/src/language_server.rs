@@ -13,6 +13,8 @@ mod server;
 #[cfg(test)]
 mod tests;
 
+pub use files::FileSystemProxy;
+pub use router::{NullProgressReporter, Router};
 pub use server::LanguageServer;
 
 use crate::{

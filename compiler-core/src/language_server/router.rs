@@ -15,6 +15,19 @@ use itertools::Itertools;
 
 use super::feedback::FeedbackBookKeeper;
 
+#[derive(Clone, Copy, Debug)]
+pub struct NullProgressReporter;
+
+impl ProgressReporter for NullProgressReporter {
+    fn compilation_started(&self) {}
+
+    fn compilation_finished(&self) {}
+
+    fn dependency_downloading_started(&self) {}
+
+    fn dependency_downloading_finished(&self) {}
+}
+
 /// The language server instance serves a language client, typically a text
 /// editor. The editor could have multiple Gleam projects open at once, so run
 /// an instance of the language server engine for each project.

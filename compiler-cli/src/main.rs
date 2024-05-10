@@ -268,6 +268,11 @@ pub enum ExportTarget {
         /// The path to write the JSON file to
         output: Utf8PathBuf,
     },
+    /// The Typed AST of a file
+    TypedAST {
+        #[arg(long = "file", required = true)]
+        file: Utf8PathBuf,
+    },
 }
 
 #[derive(Args, Debug, Clone)]
@@ -484,6 +489,7 @@ fn main() {
         Command::Export(ExportTarget::HexTarball) => export::hex_tarball(),
         Command::Export(ExportTarget::JavascriptPrelude) => export::javascript_prelude(),
         Command::Export(ExportTarget::TypescriptPrelude) => export::typescript_prelude(),
+        Command::Export(ExportTarget::TypedAST { file }) => export::typed_ast(file),
         Command::Export(ExportTarget::PackageInterface { output }) => {
             export::package_interface(output)
         }
