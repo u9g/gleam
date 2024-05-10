@@ -553,27 +553,27 @@ impl<'a> Environment<'a> {
             .entity_usages
             .pop()
             .expect("Expected a bottom level of entity usages.");
-        self.handle_unused(unused);
+        // self.handle_unused(unused);
 
         let mut locations = Vec::new();
-        for (name, location) in self.unused_modules.clone().into_iter() {
-            self.warnings.emit(Warning::UnusedImportedModule {
-                name: name.clone(),
-                location,
-            });
-            locations.push(location);
-        }
+        // for (name, location) in self.unused_modules.clone().into_iter() {
+        //     self.warnings.emit(Warning::UnusedImportedModule {
+        //         name: name.clone(),
+        //         location,
+        //     });
+        //     locations.push(location);
+        // }
 
-        for (name, info) in self.unused_module_aliases.iter() {
-            if !self.unused_modules.contains_key(name) {
-                self.warnings.emit(Warning::UnusedImportedModuleAlias {
-                    alias: name.clone(),
-                    location: info.location,
-                    module_name: info.module_name.clone(),
-                });
-                locations.push(info.location);
-            }
-        }
+        // for (name, info) in self.unused_module_aliases.iter() {
+        //     if !self.unused_modules.contains_key(name) {
+        //         self.warnings.emit(Warning::UnusedImportedModuleAlias {
+        //             alias: name.clone(),
+        //             location: info.location,
+        //             module_name: info.module_name.clone(),
+        //         });
+        //         locations.push(info.location);
+        //     }
+        // }
         locations
     }
 
