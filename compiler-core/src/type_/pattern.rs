@@ -551,7 +551,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 let instantiated_constructor_type =
                     self.environment
                         .instantiate(constructor_typ, &mut hashmap![], self.hydrator);
-                match instantiated_constructor_type.deref() {
+                let ret = match instantiated_constructor_type.deref() {
                     Type::Fn { args, retrn } => {
                         if args.len() == pattern_args.len() {
                             let pattern_args = pattern_args
@@ -618,7 +618,32 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     }
 
                     _ => panic!("Unexpected constructor type for a constructor pattern."),
+                };
+
+                if let Ok(Pattern::Constructor {
+                    location,
+                    module: Some(module_name),
+                    name,
+                    ..
+                }) = &ret
+                {
+                    if self
+                        .environment
+                        .unqualified_imported_names
+                        .contains_key(name)
+                    {
+                        self.environment
+                            .warnings
+                            .emit(Warning::UnnecessaryQualification {
+                                location: SrcSpan {
+                                    start: location.start,
+                                    end: location.start + module_name.len() as u32,
+                                },
+                            });
+                    }
                 }
+
+                ret
             }
         }
     }
