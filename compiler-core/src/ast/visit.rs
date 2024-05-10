@@ -46,7 +46,7 @@ use ecow::EcoString;
 use crate::type_::Type;
 
 use super::{
-    Arg, BinOp, BitArrayOption, Definition, Import, SrcSpan, Statement, TypeAst, TypedArg,
+    Arg, BinOp, BitArrayOption, Definition, Import, Pattern, SrcSpan, Statement, TypeAst, TypedArg,
     TypedAssignment, TypedClause, TypedDefinition, TypedExpr, TypedExprBitArraySegment,
     TypedFunction, TypedModule, TypedRecordUpdateArg, TypedStatement, Use,
 };
@@ -188,6 +188,10 @@ pub trait Visit<'ast> {
         clauses: &'ast [TypedClause],
     ) {
         visit_typed_expr_case(self, location, typ, subjects, clauses);
+    }
+
+    fn visit_typed_pattern(&mut self, pattern: &'ast Pattern<Arc<Type>>) {
+        visit_typed_pattern(self, pattern)
     }
 
     fn visit_typed_expr_record_access(
@@ -646,6 +650,12 @@ pub fn visit_typed_expr_case<'a, V>(
     }
 }
 
+pub fn visit_typed_pattern<'a, V>(_v: &mut V, _pattern: &'a Pattern<Arc<Type>>)
+where
+    V: Visit<'a> + ?Sized,
+{
+}
+
 pub fn visit_typed_expr_record_access<'a, V>(
     v: &mut V,
     _location: &'a SrcSpan,
@@ -781,6 +791,7 @@ pub fn visit_typed_assignment<'a, V>(v: &mut V, assignment: &'a TypedAssignment)
 where
     V: Visit<'a> + ?Sized,
 {
+    v.visit_typed_pattern(&assignment.pattern);
     v.visit_typed_expr(&assignment.value);
 }
 
@@ -802,6 +813,14 @@ pub fn visit_typed_clause<'a, V>(v: &mut V, clause: &'a TypedClause)
 where
     V: Visit<'a> + ?Sized,
 {
+    for pattern in &clause.pattern {
+        v.visit_typed_pattern(&pattern)
+    }
+    for alternate_clause_pattern_set in &clause.alternative_patterns {
+        for alternate_clause_pattern in alternate_clause_pattern_set {
+            v.visit_typed_pattern(&alternate_clause_pattern)
+        }
+    }
     v.visit_typed_expr(&clause.then);
 }
 
