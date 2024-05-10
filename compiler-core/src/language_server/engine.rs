@@ -271,7 +271,10 @@ where
                 if let Error::Type { errors, .. } = err {
                     for error in errors {
                         if let crate::type_::Error::IncorrectArity {
-                            location, labels, ..
+                            expected,
+                            location,
+                            labels,
+                            ..
                         } = error
                         {
                             let action = TextEdit {
@@ -294,10 +297,14 @@ where
                                     },
                                     &LineNumbers::new(&code),
                                 ),
-                                new_text: labels
-                                    .iter()
-                                    .map(|label| format!("{label}: todo"))
-                                    .join(", "),
+                                new_text: if !labels.is_empty() {
+                                    labels
+                                        .iter()
+                                        .map(|label| format!("{label}: todo"))
+                                        .join(", ")
+                                } else {
+                                    "todo, ".repeat(expected).trim_end_matches(", ").to_owned()
+                                },
                             };
 
                             CodeActionBuilder::new("Prefill arguments")
