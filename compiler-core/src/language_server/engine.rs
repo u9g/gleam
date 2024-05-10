@@ -1,7 +1,7 @@
 use crate::{
     ast::{
-        Arg, Definition, Import, ModuleConstant, Publicity, SrcSpan, TypedDefinition, TypedExpr,
-        TypedFunction, TypedPattern,
+        Arg, Definition, Import, ModuleConstant, Pattern, Publicity, SrcSpan, TypedDefinition,
+        TypedExpr, TypedFunction, TypedPattern,
     },
     build::{type_constructor_from_modules, Located, Module, UnqualifiedImport},
     config::PackageConfig,
@@ -29,7 +29,7 @@ use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 use super::{
-    code_action::{CodeActionBuilder, ReplaceModuleSelectWithUseSearcher},
+    code_action::{CodeActionBuilder, ReplaceType, ReplaceWithUseSearcher},
     inlay_hint::InlayHintSearcher,
     semantic_tokens::SemanticTokenSearcher,
     src_span_to_lsp_range, DownloadDependencies, MakeLocker,
@@ -269,7 +269,7 @@ where
 
     fn code_action_add_import(
         &self,
-        module: &Module,
+        build_module: &Module,
         params: &lsp::CodeActionParams,
         actions: &mut Vec<CodeAction>,
     ) {
@@ -279,64 +279,88 @@ where
                 text_document: params.text_document.clone(),
                 position: params.range.start,
             },
-            module,
+            build_module,
         ) else {
             return;
         };
 
-        match located {
+        let changes: Option<(Vec<TextEdit>, &EcoString, &EcoString)> = match located {
+            Located::Pattern(Pattern::Constructor { name, module, .. }) => module
+                .as_ref()
+                .map(|module_name| {
+                    Some((
+                        ReplaceWithUseSearcher::new(
+                            build_module,
+                            &module_name,
+                            name,
+                            ReplaceType::ConstructorPattern,
+                        )
+                        .text_edits(),
+                        module_name,
+                        name,
+                    ))
+                })
+                .flatten(),
             Located::Expression(TypedExpr::ModuleSelect {
                 label,
                 module_name,
                 module_alias,
                 ..
-            }) => {
-                let mut changes =
-                    ReplaceModuleSelectWithUseSearcher::new(module, module_alias, label)
-                        .text_edits();
+            }) => Some((
+                ReplaceWithUseSearcher::new(
+                    build_module,
+                    module_alias,
+                    label,
+                    ReplaceType::ModuleSelect,
+                )
+                .text_edits(),
+                module_name,
+                label,
+            )),
+            _ => None,
+        };
 
-                let import = module.ast.definitions.iter().find(|x| {
-                    if let Definition::Import(import) = x {
-                        // todo: handle aliased imports
-                        return import.module.as_ref() == module_name.as_ref();
-                    };
-                    false
-                });
+        if let Some((mut changes, module_name, label)) = changes {
+            let import = build_module.ast.definitions.iter().find(|x| {
+                if let Definition::Import(import) = x {
+                    // todo: handle aliased imports
+                    return import.module.as_ref().ends_with(module_name.as_ref());
+                };
+                false
+            });
 
-                // todo: handle type imports
-                if let Some(Definition::Import(import)) = import {
-                    if import.unqualified_types.is_empty() && import.unqualified_values.is_empty() {
-                        changes.push(TextEdit {
-                            range: src_span_to_lsp_range(
-                                SrcSpan {
-                                    start: import.location.end,
-                                    end: import.location.end,
-                                },
-                                &line_numbers,
-                            ),
-                            new_text: format!(".{{{}}}", label.to_owned()).to_owned(),
-                        })
-                    } else {
-                        changes.push(TextEdit {
-                            range: src_span_to_lsp_range(
-                                SrcSpan {
-                                    start: import.location.end - 1,
-                                    end: import.location.end - 1,
-                                },
-                                &line_numbers,
-                            ),
-                            new_text: format!(", {}", label.to_owned()).to_owned(),
-                        })
-                    }
+            // todo: handle type imports
+            if let Some(Definition::Import(import)) = import {
+                if import.unqualified_types.is_empty() && import.unqualified_values.is_empty() {
+                    changes.push(TextEdit {
+                        range: src_span_to_lsp_range(
+                            SrcSpan {
+                                start: import.location.end,
+                                end: import.location.end,
+                            },
+                            &line_numbers,
+                        ),
+                        new_text: format!(".{{{}}}", label),
+                    })
+                } else {
+                    changes.push(TextEdit {
+                        range: src_span_to_lsp_range(
+                            SrcSpan {
+                                start: import.location.end - 1,
+                                end: import.location.end - 1,
+                            },
+                            &line_numbers,
+                        ),
+                        new_text: format!(", {}", label),
+                    })
                 }
-
-                CodeActionBuilder::new("Replace qualified type with import")
-                    .kind(lsp_types::CodeActionKind::QUICKFIX)
-                    .changes(uri.clone(), changes)
-                    .preferred(true)
-                    .push_to(actions);
             }
-            _ => {}
+
+            CodeActionBuilder::new("Replace qualified type with import")
+                .kind(lsp_types::CodeActionKind::QUICKFIX)
+                .changes(uri.clone(), changes)
+                .preferred(true)
+                .push_to(actions);
         }
     }
 

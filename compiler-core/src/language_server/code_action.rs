@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ecow::EcoString;
 use lsp_types::{CodeAction, TextEdit, Url};
 
@@ -5,10 +7,11 @@ use crate::{
     ast::{
         self,
         visit::{self, Visit},
-        SrcSpan,
+        Pattern, SrcSpan,
     },
     build,
     line_numbers::LineNumbers,
+    type_::Type,
 };
 
 use super::src_span_to_lsp_range;
@@ -59,19 +62,20 @@ impl CodeActionBuilder {
     }
 }
 
-pub struct ReplaceModuleSelectWithUseSearcher<'a> {
+pub struct ReplaceWithUseSearcher<'a> {
     line_numbers: LineNumbers,
     module_alias: &'a EcoString,
     label: &'a EcoString,
     module: &'a ast::TypedModule,
     text_edits: Vec<TextEdit>,
+    replace_type: ReplaceType,
 }
 
-impl<'ast> Visit<'ast> for ReplaceModuleSelectWithUseSearcher<'_> {
+impl<'ast> Visit<'ast> for ReplaceWithUseSearcher<'_> {
     fn visit_typed_expr_module_select(
         &mut self,
         location: &'ast SrcSpan,
-        typ: &'ast std::sync::Arc<crate::type_::Type>,
+        typ: &'ast Arc<Type>,
         label: &'ast EcoString,
         module_name: &'ast EcoString,
         module_alias: &'ast EcoString,
@@ -100,13 +104,78 @@ impl<'ast> Visit<'ast> for ReplaceModuleSelectWithUseSearcher<'_> {
             constructor,
         )
     }
+
+    fn visit_typed_pattern(&mut self, pattern: &'ast Pattern<Arc<Type>>) {
+        self.visit_pattern(pattern);
+        visit::visit_typed_pattern(self, pattern);
+    }
 }
 
-impl<'ast> ReplaceModuleSelectWithUseSearcher<'ast> {
+pub enum ReplaceType {
+    ModuleSelect,
+    ConstructorPattern,
+}
+
+impl<'ast> ReplaceWithUseSearcher<'ast> {
+    fn visit_pattern(&mut self, pattern: &Pattern<Arc<Type>>) {
+        match &pattern {
+            Pattern::Assign { pattern, .. } => self.visit_pattern(pattern),
+            Pattern::List { elements, tail, .. } => {
+                for element in elements {
+                    self.visit_pattern(element)
+                }
+
+                if let Some(tail) = tail {
+                    self.visit_pattern(tail)
+                }
+            }
+            Pattern::Constructor {
+                location,
+                name,
+                arguments,
+                module,
+                ..
+            } => {
+                if matches!(self.replace_type, ReplaceType::ConstructorPattern) {
+                    if let Some(module) = module {
+                        if module == self.module_alias && name == self.label {
+                            let range = src_span_to_lsp_range(
+                                SrcSpan {
+                                    start: location.start,
+                                    end: location.start + module.len() as u32 + /* dot */ 1,
+                                },
+                                &self.line_numbers,
+                            );
+                            self.text_edits.push(TextEdit {
+                                range,
+                                new_text: "".into(),
+                            });
+                        }
+                    }
+                }
+
+                for argument in arguments {
+                    self.visit_pattern(&argument.value)
+                }
+            }
+            Pattern::Tuple { elems, .. } => {
+                for elem in elems {
+                    self.visit_pattern(&elem)
+                }
+            }
+            Pattern::BitArray { segments, .. } => {
+                for segment in segments {
+                    self.visit_pattern(&segment.value)
+                }
+            }
+            _ => {}
+        }
+    }
     pub fn new(
         module: &'ast build::Module,
         module_alias: &'ast EcoString,
         label: &'ast EcoString,
+        replace_type: ReplaceType,
     ) -> Self {
         Self {
             line_numbers: LineNumbers::new(&module.code),
@@ -114,6 +183,7 @@ impl<'ast> ReplaceModuleSelectWithUseSearcher<'ast> {
             label,
             module: &module.ast,
             text_edits: vec![],
+            replace_type,
         }
     }
 
