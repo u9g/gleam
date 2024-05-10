@@ -465,18 +465,6 @@ fn diagnostic_to_lsp(diagnostic: Diagnostic) -> Vec<lsp::Diagnostic> {
     let hint = diagnostic.hint;
     let mut text = diagnostic.title;
 
-    if let Some(label) = diagnostic
-        .location
-        .as_ref()
-        .and_then(|location| location.label.text.as_deref())
-    {
-        text.push_str("\n\n");
-        text.push_str(label);
-        if !label.ends_with(['.', '?']) {
-            text.push('.');
-        }
-    }
-
     if !diagnostic.text.is_empty() {
         text.push_str("\n\n");
         text.push_str(&diagnostic.text);
