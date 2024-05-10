@@ -342,7 +342,15 @@ where
                         ),
                         new_text: format!(".{{{}}}", label),
                     })
-                } else {
+                } else if !import
+                    .unqualified_values
+                    .iter()
+                    .any(|x| x.as_name.as_ref().unwrap_or_else(|| &x.name) == label.as_ref())
+                    && !import
+                        .unqualified_types
+                        .iter()
+                        .any(|x| x.as_name.as_ref().unwrap_or_else(|| &x.name) == label.as_ref())
+                {
                     changes.push(TextEdit {
                         range: src_span_to_lsp_range(
                             SrcSpan {
