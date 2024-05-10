@@ -779,7 +779,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
                             for (i, elem) in tuple_type_elems.iter().enumerate() {
                                 if elem.is_list() {
-                                    return Err(Error::ListUsedInReflection {
+                                    self.errors.push(Error::ListUsedInReflection {
                                         location: elems[i].location(),
                                     });
                                 }
