@@ -79,11 +79,14 @@ where
         constructor: &'ast crate::type_::ValueConstructor,
         name: &'ast EcoString,
     ) {
-        let token_type = self.type_to_token_type(
-            &constructor.type_,
-            matches!(constructor.variant, ValueConstructorVariant::Record { .. }),
-        );
-        self.push_range(*location, token_type);
+        // could be _pipe, etc
+        if !name.starts_with("_") {
+            let token_type = self.type_to_token_type(
+                &constructor.type_,
+                matches!(constructor.variant, ValueConstructorVariant::Record { .. }),
+            );
+            self.push_range(*location, token_type);
+        }
         visit::visit_typed_expr_var(self, location, constructor, name);
     }
 
