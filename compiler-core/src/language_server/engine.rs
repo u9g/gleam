@@ -263,6 +263,24 @@ where
         compiler_result: Option<(Error, String)>,
     ) -> Response<Option<Vec<CodeAction>>> {
         self.respond(|this| {
+            fn find_index_of_left_and_right_paren(
+                code: &str,
+                location: &SrcSpan,
+            ) -> Option<(u32, u32)> {
+                Some((
+                    code.char_indices()
+                        .skip(location.start as usize)
+                        .find(|x| x.1 == '(')?
+                        .0 as u32
+                        + 1,
+                    code[..location.end as usize]
+                        .char_indices()
+                        .rev()
+                        .find(|x| x.1 == ')')?
+                        .0 as u32,
+                ))
+            }
+
             let mut actions = vec![];
 
             if let Some(err) = compiler_result {
@@ -277,41 +295,30 @@ where
                             ..
                         } = error
                         {
-                            let action = TextEdit {
-                                range: src_span_to_lsp_range(
-                                    SrcSpan {
-                                        start: code
-                                            .char_indices()
-                                            .skip(location.start as usize)
-                                            .find(|x| x.1 == '(')
-                                            .unwrap()
-                                            .0
-                                            as u32
-                                            + 1,
-                                        end: code[..location.end as usize]
-                                            .char_indices()
-                                            .rev()
-                                            .find(|x| x.1 == ')')
-                                            .unwrap()
-                                            .0 as u32,
+                            if let Some((start, end)) =
+                                find_index_of_left_and_right_paren(&code, &location)
+                            {
+                                let action = TextEdit {
+                                    range: src_span_to_lsp_range(
+                                        SrcSpan { start, end },
+                                        &LineNumbers::new(&code),
+                                    ),
+                                    new_text: if !labels.is_empty() {
+                                        labels
+                                            .iter()
+                                            .map(|label| format!("{label}: todo"))
+                                            .join(", ")
+                                    } else {
+                                        "todo, ".repeat(expected).trim_end_matches(", ").to_owned()
                                     },
-                                    &LineNumbers::new(&code),
-                                ),
-                                new_text: if !labels.is_empty() {
-                                    labels
-                                        .iter()
-                                        .map(|label| format!("{label}: todo"))
-                                        .join(", ")
-                                } else {
-                                    "todo, ".repeat(expected).trim_end_matches(", ").to_owned()
-                                },
-                            };
+                                };
 
-                            CodeActionBuilder::new("Prefill arguments")
-                                .kind(lsp_types::CodeActionKind::QUICKFIX)
-                                .changes(params.text_document.uri.clone(), vec![action])
-                                .preferred(true)
-                                .push_to(&mut actions);
+                                CodeActionBuilder::new("Prefill arguments")
+                                    .kind(lsp_types::CodeActionKind::QUICKFIX)
+                                    .changes(params.text_document.uri.clone(), vec![action])
+                                    .preferred(true)
+                                    .push_to(&mut actions);
+                            }
                         }
                     }
                 }
