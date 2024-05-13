@@ -327,7 +327,7 @@ where
     }
 
     fn type_to_token_type(&mut self, type_: &Type, is_record: bool) -> u32 {
-        let mut token_type = SEMANTIC_TOKEN_FUNCTION;
+        let mut token_type = SEMANTIC_TOKEN_PROPERTY;
         let mut type__ = type_.to_owned();
         loop {
             match type__ {
@@ -361,19 +361,19 @@ where
                                     break;
                                 }
                                 ValueConstructorVariant::Record { .. } => {
-                                    token_type = SEMANTIC_TOKEN_ENUM_MEMBER;
+                                    token_type = SEMANTIC_TOKEN_PROPERTY;
                                     break;
                                 }
                             }
                         }
 
                         if module.types.get(name).is_some() {
-                            token_type = SEMANTIC_TOKEN_TYPE;
+                            token_type = SEMANTIC_TOKEN_PROPERTY;
                             break;
                         }
                     }
                 }
-                Type::Fn { retrn, .. } => {
+                Type::Fn { .. } => {
                     token_type = if is_record {
                         SEMANTIC_TOKEN_ENUM_MEMBER
                     } else {
