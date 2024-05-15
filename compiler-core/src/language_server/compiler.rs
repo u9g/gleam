@@ -99,6 +99,9 @@ where
         // Lock the build directory to ensure to ensure we are the only one compiling
         let _lock_guard = self.locker.lock_for_build();
 
+        // Empty stale tracker
+        self.project_compiler.stale_modules.empty();
+
         // Verify that the build directory was created using the same version of
         // Gleam as we are running. If it is not then we discard the build
         // directory as the cache files may be in a different format.

@@ -83,7 +83,7 @@ pub struct ProjectCompiler<IO> {
     pub(crate) packages: HashMap<String, ManifestPackage>,
     importable_modules: im::HashMap<EcoString, type_::ModuleInterface>,
     defined_modules: im::HashMap<EcoString, Utf8PathBuf>,
-    stale_modules: StaleTracker,
+    pub(crate) stale_modules: StaleTracker,
     warnings: WarningEmitter,
     telemetry: Box<dyn Telemetry>,
     options: Options,
