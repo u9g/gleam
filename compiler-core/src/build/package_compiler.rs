@@ -5,10 +5,9 @@ use crate::{
     ast::{SrcSpan, TypedModule, UntypedModule},
     build::{
         elixir_libraries::ElixirLibraries,
-        module_loader::SourceFingerprint,
         native_file_copier::NativeFileCopier,
         package_loader::{CodegenRequired, PackageLoader, StaleTracker},
-        Mode, Module, Origin, Package, Target,
+        Mode, Module, Origin, Package, SourceFingerprint, Target,
     },
     codegen::{Erlang, ErlangApp, JavaScript, TypeScriptDeclarations},
     config::PackageConfig,
@@ -440,7 +439,7 @@ fn analyse(
         // so that instead of returning immediately we bubble up and
         // do the error check prior to code generation.
         let ast = match inference_result {
-            Err(crate::analyse::InferenceFailure { errors, .. }) => {
+            Err(crate::analyse::AnalysisFailure { errors, .. }) => {
                 return Err(Error::Type {
                     path: path.clone(),
                     src: code.clone(),
