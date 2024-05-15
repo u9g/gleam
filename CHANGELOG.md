@@ -64,6 +64,20 @@
   a new version of an existing package can be reverted or updated within one hour.
   * You could already update packages even before this release by running: `gleam publish` again.
 
+- When the user tries to replace a release without the `--replace` flag
+  the error message now mentions the lack of a `--replace` flag.
+  ([Pi-Cla](https://github.com/Pi-Cla))
+
+  ```
+  error: Version already published
+
+  Version v1.0.0 has already been published.
+  This release has been recently published so you can replace it
+  or you can publish it using a different version number
+
+  Hint: Please add the --replace flag if you want to replace the release.
+  ```
+
 ### Compiler
 
 - The compiler will now raise a warning for `let assert` assignments where the
@@ -221,9 +235,9 @@
   branch is going to match with this value.
 
 - The compiler will now continue module analysis when there are errors in top
-  level constant definitions, custom type definitions, imports or type aliases.
-  This means that when these errors occur the compiler will continue analysing
-  the rest of the code to find other errors and type information.
+  level definitions. This means that when these errors occur the compiler will
+  continue analysing the rest of the code to find other errors and type
+  information.
 
   When using the build tool this means that the programmer will be shown
   multiple error messages when there are multiple problems in a module.
@@ -356,13 +370,20 @@
   removed if it would otherwise be left blank.
   ([Milco Kats](https://github.com/katsmil))
 
-- Hover for type annotations is now separate from the thing being annotated. ([Ameen Radwan](https://github.com/Acepie))
+- Hover for type annotations is now separate from the thing being annotated.
+  ([Ameen Radwan](https://github.com/Acepie))
 
 - Go to definition now works for direct type annotations. ([Ameen Radwan](https://github.com/Acepie))
 
 - Go to definition now works for import statements. ([Ameen Radwan](https://github.com/Acepie))
 
 - Hover now works for unqualified imports. ([Ameen Radwan](https://github.com/Acepie))
+
+- The language server now detects when the `gleam.toml` config file has changed
+  even if the client does not support watching files. This means that changes to
+  the default target, new dependencies, and other configuration will be
+  automatically detected.
+  ([Louis Pilfold](https://github.com/lpil))
 
 ### Bug Fixes
 
@@ -415,3 +436,7 @@
 - Fixed a bug where using a constant defined in another module that referenced
   a private function could generate invalid code on the Erlang target.
   ([Shayan Javani](https://github.com/massivefermion))
+
+- Fixed a bug where the language server would dynamically request the client to
+  watch files even when the client has stated it does not support that.
+  ([Louis Pilfold](https://github.com/lpil))
