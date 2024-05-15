@@ -366,7 +366,12 @@ impl<'a> TypeScriptGenerator<'a> {
             .collect();
 
         let definition = if constructors.is_empty() {
-            "any".to_doc()
+            definitions.push(Ok(docvec![
+                "declare const ",
+                name_with_generics(Document::String(format!("{name}$_$")), typed_parameters),
+                ": unique symbol;"
+            ]));
+            Document::String(format!("typeof {name}$_$"))
         } else {
             let constructors = constructors.iter().map(|x| {
                 name_with_generics(
@@ -393,6 +398,32 @@ impl<'a> TypeScriptGenerator<'a> {
         constructor: &'a TypedRecordConstructor,
         opaque: bool,
     ) -> Document<'a> {
+        fn name_with_generics_with_interleaven_default_generic<'a>(
+            name: Document<'a>,
+            types: impl IntoIterator<Item = &'a Arc<Type>>,
+        ) -> Document<'a> {
+            let generic_usages = collect_generic_usages(HashMap::new(), types);
+            let generic_names: Vec<Document<'_>> = generic_usages
+                .keys()
+                .map(|id| {
+                    let Document::EcoString(x) = id_to_type_var(*id) else {
+                        unreachable!()
+                    };
+
+                    Document::String(format!("{x} = any"))
+                })
+                .collect();
+
+            docvec![
+                name,
+                if generic_names.is_empty() {
+                    super::nil()
+                } else {
+                    wrap_generic_args(generic_names)
+                },
+            ]
+        }
+
         self.set_prelude_used();
         let head = docvec![
             // opaque type constructors are not exposed to JS
@@ -402,7 +433,7 @@ impl<'a> TypeScriptGenerator<'a> {
                 "export ".to_doc()
             },
             "class ",
-            name_with_generics(
+            name_with_generics_with_interleaven_default_generic(
                 super::maybe_escape_identifier_doc(&constructor.name),
                 constructor.arguments.iter().map(|a| &a.type_)
             ),
