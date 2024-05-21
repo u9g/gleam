@@ -1,8 +1,7 @@
 use crate::{
     ast::{
-        Arg, Arg, Definition, Definition, Import, Import, ModuleConstant, ModuleConstant, Pattern,
-        Publicity, Publicity, SrcSpan, SrcSpan, TypedDefinition, TypedDefinition, TypedExpr,
-        TypedExpr, TypedFunction, TypedFunction, TypedModule, TypedPattern, TypedPattern,
+        Arg, Definition, Import, ModuleConstant, Pattern, Publicity, SrcSpan, TypedDefinition,
+        TypedExpr, TypedFunction, TypedModule, TypedPattern,
     },
     build::{type_constructor_from_modules, Located, Module, UnqualifiedImport},
     config::PackageConfig,
@@ -30,8 +29,9 @@ use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 use super::{
-    code_action::{CodeActionBuilder, RedundantTupleInCaseSubject},
-    code_action::{CodeActionBuilder, ReplaceType, ReplaceWithUseSearcher},
+    code_action::{
+        CodeActionBuilder, RedundantTupleInCaseSubject, ReplaceType, ReplaceWithUseSearcher,
+    },
     inlay_hint::InlayHintSearcher,
     semantic_tokens::SemanticTokenSearcher,
     src_span_to_lsp_range, DownloadDependencies, MakeLocker,
