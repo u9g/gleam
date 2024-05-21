@@ -40,7 +40,7 @@ impl ProgressReporter for NullProgressReporter {
 /// file using the nearest parent `gleam.toml` file.
 ///
 #[derive(Debug)]
-pub(crate) struct Router<IO, Reporter> {
+pub struct Router<IO, Reporter> {
     io: FileSystemProxy<IO>,
     engines: HashMap<Utf8PathBuf, Project<IO, Reporter>>,
     progress_reporter: Reporter,
@@ -197,7 +197,7 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) struct Project<A, B> {
+pub struct Project<A, B> {
     pub engine: LanguageServerEngine<A, B>,
     pub feedback: FeedbackBookKeeper,
     pub gleam_toml_modification_time: SystemTime,

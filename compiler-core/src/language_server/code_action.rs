@@ -4,21 +4,6 @@ use ecow::EcoString;
 use lsp_types::{CodeAction, CodeActionKind, CodeActionParams, TextEdit, Url};
 
 use crate::{
-    ast::{self, visit::Visit as _, SrcSpan},
-    build,
-    line_numbers::LineNumbers,
-    parse::extra::ModuleExtra,
-    type_::Type,
-};
-
-use super::{engine::overlaps, src_span_to_lsp_range};
-
-use std::sync::Arc;
-
-use ecow::EcoString;
-use lsp_types::{CodeAction, TextEdit, Url};
-
-use crate::{
     ast::{
         self,
         visit::{self, Visit},
@@ -26,10 +11,11 @@ use crate::{
     },
     build,
     line_numbers::LineNumbers,
+    parse::extra::ModuleExtra,
     type_::Type,
 };
 
-use super::src_span_to_lsp_range;
+use super::{engine::overlaps, src_span_to_lsp_range};
 
 #[derive(Debug)]
 pub struct CodeActionBuilder {
