@@ -58,11 +58,13 @@
 
   Hint: Rename this module and try again.
   ```
+
 - New subcommand `gleam hex revert` added. ([Pi-Cla](https://github.com/Pi-Cla))
-  * You can specify the options like this: `gleam hex revert --package gling --version 1.2.3`
-  * A new package can be reverted or updated within 24 hours of it's initial publish,
-  a new version of an existing package can be reverted or updated within one hour.
-  * You could already update packages even before this release by running: `gleam publish` again.
+
+  - You can specify the options like this: `gleam hex revert --package gling --version 1.2.3`
+  - A new package can be reverted or updated within 24 hours of it's initial publish,
+    a new version of an existing package can be reverted or updated within one hour.
+  - You could already update packages even before this release by running: `gleam publish` again.
 
 - When the user tries to replace a release without the `--replace` flag
   the error message now mentions the lack of a `--replace` flag.
@@ -234,6 +236,8 @@
   Matching on a literal value is redundant since you can already tell which
   branch is going to match with this value.
 
+  ```
+
 - The compiler will now continue module analysis when there are errors in top
   level definitions. This means that when these errors occur the compiler will
   continue analysing the rest of the code to find other errors and type
@@ -248,6 +252,54 @@
   the language server as its information about the code will be more up-to-date.
 
   ([Ameen Radwan](https://github.com/Acepie)) and ([Louis Pilfold](https://github.com/Acepie))
+
+- An informative error message is now emitted when attempting to use a function
+  from another module in a constant expression. Previously this would result in
+  a cryptic parse error. ([Nino Annighoefer](https://github.com/nino))
+
+  ```
+  error: Syntax error
+    ┌─ /src/parse/error.gleam:3:18
+    │
+  3 │ const wib: Int = wibble(1, "wobble")
+    │                  ^^^^^^^ Functions can only be called within other functions
+  ```
+
+- The compiler will now provide more helpful error messages when triple equals
+  are used instead of double equals. ([Rabin Gaire](https://github.com/rabingaire))
+
+  ```
+  error: Syntax error
+    ┌─ /src/parse/error.gleam:4:37
+    │
+  4 │   [1,2,3] |> list.filter(fn (a) { a === 3 })
+    │                                     ^^^ Did you mean `==`?
+
+  Gleam uses `==` to check for equality between two values.
+  See: https://tour.gleam.run/basics/equality
+  ```
+
+  - The compiler will now raise a warning for unreachable code that comes after
+    a panicking expression.
+
+    ```
+    pub fn main() {
+      panic
+      "unreachable!"
+    }
+    ```
+
+    ```
+    warning: Unreachable code
+      ┌─ /src/warning/wrn.gleam:3:11
+      │
+    3 │    "unreachable!"
+      │    ^^^^^^^^^^^^^^
+
+    This code is unreachable because it comes after a `panic`.
+    ```
+
+    ([Giacomo Cavalieri](https://github.com/giacomocavalieri))
 
 ### Formatter
 
@@ -385,6 +437,32 @@
   automatically detected.
   ([Louis Pilfold](https://github.com/lpil))
 
+- Completions are now provided for values and types for use in unqualified
+  imports. ([Ameen Radwan](https://github.com/Acepie))
+
+- `.` is now advertised as a completion trigger character.
+  ([Louis Pilfold](https://github.com/lpil))
+
+- A new code action has been added to remove redundant tuples around case
+  expression subjects and patterns when possible.
+  ([Nicky Lim](https://github.com/nicklimmm))
+
+  ```
+  case #(x, y) {
+    #(1, 2) -> 0
+    #(_, _) -> 1
+  }
+  ```
+
+  Is rewritten to:
+
+  ```
+  case x, y {
+    1, 2 -> 0
+    _, _ -> 1
+  }
+  ```
+
 ### Bug Fixes
 
 - Fixed [RUSTSEC-2021-0145](https://rustsec.org/advisories/RUSTSEC-2021-0145) by
@@ -440,3 +518,17 @@
 - Fixed a bug where the language server would dynamically request the client to
   watch files even when the client has stated it does not support that.
   ([Louis Pilfold](https://github.com/lpil))
+
+- Fixed a bug where local path dependencies could be mishandled on Windows.
+  ([Francisco Montanez](https://github.com/Francisco-Montanez))
+
+- Fixed a bug where adding a comment to a case clause would cause it to break
+  on multiple lines.
+  ([Giacomo Cavalieri](https://github.com/giacomocavalieri))
+
+- Fixed a bug where the formatter would not indent a case branch's arrow.
+  ([Giacomo Cavalieri](https://github.com/giacomocavalieri))
+
+- Fixed a bug where pattern matching on a string prefix containing an escape
+  code could generate incorrect Erlang code.
+  ([Nashwan Azhari](https://github.com/aznashwan))

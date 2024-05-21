@@ -132,6 +132,7 @@ enum Command {
     ///
     /// - HEXPM_USER: (optional) The Hex username to authenticate with.
     /// - HEXPM_PASS: (optional) The Hex password to authenticate with.
+    /// - HEXPM_API_KEY: (optional) A Hex API key to use instead of authenticating.
     #[command(verbatim_doc_comment)]
     Publish {
         #[arg(long)]
@@ -350,6 +351,7 @@ enum Hex {
     ///
     /// - HEXPM_USER: (optional) The Hex username to authenticate with.
     /// - HEXPM_PASS: (optional) The Hex password to authenticate with.
+    /// - HEXPM_API_KEY: (optional) A Hex API key to use instead of authenticating.
     #[command(verbatim_doc_comment)]
     Retire {
         package: String,
@@ -368,6 +370,7 @@ enum Hex {
     ///
     /// - HEXPM_USER: (optional) The Hex username to authenticate with.
     /// - HEXPM_PASS: (optional) The Hex password to authenticate with.
+    /// - HEXPM_API_KEY: (optional) A Hex API key to use instead of authenticating.
     #[command(verbatim_doc_comment)]
     Unretire { package: String, version: String },
 
@@ -377,6 +380,7 @@ enum Hex {
     ///
     /// - HEXPM_USER: (optional) The Hex username to authenticate with.
     /// - HEXPM_PASS: (optional) The Hex password to authenticate with.
+    /// - HEXPM_API_KEY: (optional) A Hex API key to use instead of authenticating.
     Revert {
         #[arg(long)]
         package: Option<String>,
@@ -401,6 +405,7 @@ enum Docs {
     ///
     /// - HEXPM_USER: (optional) The Hex username to authenticate with.
     /// - HEXPM_PASS: (optional) The Hex password to authenticate with.
+    /// - HEXPM_API_KEY: (optional) A Hex API key to use instead of authenticating.
     #[command(verbatim_doc_comment)]
     Publish,
 
@@ -410,6 +415,7 @@ enum Docs {
     ///
     /// - HEXPM_USER: (optional) The Hex username to authenticate with.
     /// - HEXPM_PASS: (optional) The Hex password to authenticate with.
+    /// - HEXPM_API_KEY: (optional) A Hex API key to use instead of authenticating.
     #[command(verbatim_doc_comment)]
     Remove {
         /// The name of the package

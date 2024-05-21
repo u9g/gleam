@@ -358,6 +358,36 @@ fn name2() {
     );
 }
 
+// https://github.com/gleam-lang/gleam/issues/3125
+#[test]
+fn triple_equals() {
+    assert_error!(
+        "let bar:Int = 32
+        bar === 42",
+        ParseError {
+            error: ParseErrorType::LexError {
+                error: LexicalError {
+                    error: LexicalErrorType::InvalidTripleEqual,
+                    location: SrcSpan { start: 29, end: 32 },
+                }
+            },
+            location: SrcSpan { start: 29, end: 32 },
+        }
+    );
+}
+
+#[test]
+fn triple_equals_with_whitespace() {
+    assert_error!(
+        "let bar:Int = 32
+        bar ==     = 42",
+        ParseError {
+            error: ParseErrorType::NoLetBinding,
+            location: SrcSpan { start: 36, end: 37 },
+        }
+    );
+}
+
 // https://github.com/gleam-lang/gleam/issues/1231
 #[test]
 fn pointless_spread() {
@@ -653,6 +683,26 @@ fn attributes_with_improper_definition() {
         r#"
 @deprecated("1")
 @external(erlang, "module", "fun")
+"#
+    );
+}
+
+#[test]
+fn const_with_function_call() {
+    assert_module_error!(
+        r#"
+pub fn wibble() { 123 }
+const wib: Int = wibble()
+"#
+    );
+}
+
+#[test]
+fn const_with_function_call_with_args() {
+    assert_module_error!(
+        r#"
+pub fn wibble() { 123 }
+const wib: Int = wibble(1, "wobble")
 "#
     );
 }

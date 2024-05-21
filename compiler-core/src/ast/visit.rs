@@ -46,9 +46,9 @@ use ecow::EcoString;
 use crate::type_::Type;
 
 use super::{
-    Arg, BinOp, BitArrayOption, Definition, Import, Pattern, SrcSpan, Statement, TypeAst, TypedArg,
-    TypedAssignment, TypedClause, TypedDefinition, TypedExpr, TypedExprBitArraySegment,
-    TypedFunction, TypedModule, TypedRecordUpdateArg, TypedStatement, Use,
+    BinOp, BitArrayOption, Definition, SrcSpan, Statement, TypeAst, TypedArg, TypedAssignment,
+    TypedClause, TypedDefinition, TypedExpr, TypedExprBitArraySegment, TypedFunction, TypedModule,
+    TypedRecordUpdateArg, TypedStatement, Use,
 };
 
 pub trait Visit<'ast> {
@@ -62,14 +62,6 @@ pub trait Visit<'ast> {
 
     fn visit_typed_function(&mut self, fun: &'ast TypedFunction) {
         visit_typed_function(self, fun);
-    }
-
-    fn visit_import(&mut self, import: &'ast Import<EcoString>) {
-        visit_import(self, import);
-    }
-
-    fn visit_argument(&mut self, arg: &'ast Arg<Arc<Type>>) {
-        visit_argument(self, arg);
     }
 
     fn visit_typed_expr(&mut self, expr: &'ast TypedExpr) {
@@ -188,10 +180,6 @@ pub trait Visit<'ast> {
         clauses: &'ast [TypedClause],
     ) {
         visit_typed_expr_case(self, location, typ, subjects, clauses);
-    }
-
-    fn visit_typed_pattern(&mut self, pattern: &'ast Pattern<Arc<Type>>) {
-        visit_typed_pattern(self, pattern)
     }
 
     fn visit_typed_expr_record_access(
@@ -339,11 +327,10 @@ where
         Definition::Function(fun) => v.visit_typed_function(fun),
         Definition::TypeAlias(_type_alias) => { /* TODO */ }
         Definition::CustomType(_custom_type) => { /* TODO */ }
-        Definition::Import(import) => v.visit_import(import),
+        Definition::Import(_import) => { /* TODO */ }
         Definition::ModuleConstant(_module_constant) => { /* TODO */ }
     }
 }
-
 pub fn visit_typed_function<'a, V>(v: &mut V, fun: &'a TypedFunction)
 where
     V: Visit<'a> + ?Sized,
@@ -351,22 +338,6 @@ where
     for stmt in &fun.body {
         v.visit_typed_statement(stmt);
     }
-
-    for arg in &fun.arguments {
-        v.visit_argument(arg);
-    }
-}
-
-pub fn visit_import<'a, V>(_v: &mut V, _import: &'a Import<EcoString>)
-where
-    V: Visit<'a> + ?Sized,
-{
-}
-
-pub fn visit_argument<'a, V>(_v: &mut V, _arg: &'a Arg<Arc<Type>>)
-where
-    V: Visit<'a> + ?Sized,
-{
 }
 
 pub fn visit_typed_expr<'a, V>(v: &mut V, node: &'a TypedExpr)
@@ -570,7 +541,7 @@ pub fn visit_typed_expr_fn<'a, V>(
     _location: &'a SrcSpan,
     _typ: &'a Arc<Type>,
     _is_capture: &'a bool,
-    args: &'a [TypedArg],
+    _args: &'a [TypedArg],
     body: &'a [TypedStatement],
     _return_annotation: &'a Option<TypeAst>,
 ) where
@@ -578,10 +549,6 @@ pub fn visit_typed_expr_fn<'a, V>(
 {
     for stmt in body {
         v.visit_typed_statement(stmt);
-    }
-
-    for arg in args {
-        v.visit_argument(arg);
     }
 }
 
@@ -648,12 +615,6 @@ pub fn visit_typed_expr_case<'a, V>(
     for clause in clauses {
         v.visit_typed_clause(clause);
     }
-}
-
-pub fn visit_typed_pattern<'a, V>(_v: &mut V, _pattern: &'a Pattern<Arc<Type>>)
-where
-    V: Visit<'a> + ?Sized,
-{
 }
 
 pub fn visit_typed_expr_record_access<'a, V>(
@@ -791,7 +752,6 @@ pub fn visit_typed_assignment<'a, V>(v: &mut V, assignment: &'a TypedAssignment)
 where
     V: Visit<'a> + ?Sized,
 {
-    v.visit_typed_pattern(&assignment.pattern);
     v.visit_typed_expr(&assignment.value);
 }
 
@@ -813,14 +773,6 @@ pub fn visit_typed_clause<'a, V>(v: &mut V, clause: &'a TypedClause)
 where
     V: Visit<'a> + ?Sized,
 {
-    for pattern in &clause.pattern {
-        v.visit_typed_pattern(&pattern)
-    }
-    for alternate_clause_pattern_set in &clause.alternative_patterns {
-        for alternate_clause_pattern in alternate_clause_pattern_set {
-            v.visit_typed_pattern(&alternate_clause_pattern)
-        }
-    }
     v.visit_typed_expr(&clause.then);
 }
 
@@ -841,7 +793,7 @@ where
     v.visit_typed_expr(&arg.value);
 }
 
-pub fn visit_typed_bit_array_option<'a, V>(_v: &mut V, option: &'a BitArrayOption<TypedExpr>)
+pub fn visit_typed_bit_array_option<'a, V>(v: &mut V, option: &'a BitArrayOption<TypedExpr>)
 where
     V: Visit<'a> + ?Sized,
 {
@@ -863,9 +815,11 @@ where
         BitArrayOption::Native { location: _ } => { /* TODO */ }
         BitArrayOption::Size {
             location: _,
-            value: _,
+            value,
             short_form: _,
-        } => { /* TODO */ }
+        } => {
+            v.visit_typed_expr(value);
+        }
         BitArrayOption::Unit {
             location: _,
             value: _,
